@@ -13,6 +13,7 @@ import { rmSync } from 'node:fs';
 import { ASSET_CODE, DATA_DIR, PG_DIR, saveKeys, type TestnetKeys } from './config.js';
 import { createCredit, disburseCredit } from './credits.js';
 import { audit, openDb } from './db.js';
+import { addCafeCereza } from './products.js';
 import { horizon, LocalSigner, NETWORK_PASSPHRASE } from './stellar.js';
 import { friendbot } from './testnet.js';
 
@@ -66,6 +67,7 @@ async function main() {
   await db.query(`INSERT INTO products (name, unit, quality_schema) VALUES
     ('Café pergamino', 'kg', '[{"key":"humedad","label":"Humedad","unit":"%"},{"key":"defectos","label":"Defectos","unit":"%"}]'),
     ('Cacao seco', 'kg', '[{"key":"humedad","label":"Humedad","unit":"%"},{"key":"fermentacion","label":"Fermentación","unit":"%"}]')`);
+  await addCafeCereza(db);
   // Demo prices, not market quotes.
   await db.query(`INSERT INTO prices (product_id, cooperative_id, price_per_unit, valid_from) VALUES
     (1, 1, 82.00, NOW() - INTERVAL '2 days'), (1, 1, 85.00, NOW() - INTERVAL '1 hour'), (2, 1, 120.00, NOW() - INTERVAL '1 hour')`);
