@@ -5,8 +5,8 @@ import {
 import Big from 'big.js';
 import { createHash, randomUUID } from 'node:crypto';
 import type { Asset } from '@stellar/stellar-sdk';
-import type { Db } from './db.js';
-import { buildRunTransaction, submit, type Signer } from './stellar.js';
+import { audit, type Db } from './db.js';
+import { buildPaymentTransaction, submit, type Signer } from './stellar.js';
 
 interface SettlementRow {
   id: number;
@@ -127,10 +127,10 @@ export async function executeRun(db: Db, deps: {
       repayByLender.set(r.lender_address, (repayByLender.get(r.lender_address) ?? new Big(0)).plus(r.credit_repayment));
     }
   }
-  const tx = await buildRunTransaction({
+  const tx = await buildPaymentTransaction({
     source: coop.stellar_address,
     asset: deps.asset,
-    pain001Sha256,
+    memoSha256: pain001Sha256,
     payments: [
       ...rows.filter((r) => new Big(r.net).gt(0)).map((r) => ({ destination: r.producer_address, amount: r.net })),
       ...[...repayByLender].map(([destination, amount]) => ({ destination, amount: amount.toFixed(2) })),
@@ -154,6 +154,7 @@ export async function executeRun(db: Db, deps: {
     await db.query(`UPDATE payment_runs SET status = 'rejected', pain002 = $1, tx_hash = $2, result_code = $3 WHERE id = $4`,
       [pain002, result.hash, result.code ?? null, run.id]);
     await db.query(`UPDATE settlements SET status = 'pending', run_id = NULL WHERE run_id = $1`, [run.id]);
+    await audit(db, 'pago.rechazado', { run: msgId, tx: result.hash, code: result.code });
     return { runId: run.id, status: 'rejected', txHash: result.hash, resultCode: result.code };
   }
 
@@ -171,14 +172,23 @@ export async function executeRun(db: Db, deps: {
     });
     await db.query(`UPDATE settlements SET status = 'paid', camt054 = $1 WHERE id = $2`, [camt054, t.settlementId]);
     if (r.credit_id && new Big(r.credit_repayment).gt(0)) {
-      await db.query(
+      const balance = (await db.query<{ outstanding: string }>(
         `UPDATE credits SET outstanding = outstanding - $1,
-                status = CASE WHEN outstanding - $1 <= 0 THEN 'paid' ELSE status END WHERE id = $2`,
+                status = CASE WHEN outstanding - $1 <= 0 THEN 'pagado' ELSE status END
+          WHERE id = $2 RETURNING outstanding::text`,
         [r.credit_repayment, r.credit_id],
+      )).rows[0]!;
+      await db.query(
+        `INSERT INTO credit_movements (credit_id, kind, amount, balance_after, settlement_id, tx_hash) VALUES ($1, 'abono', $2, $3, $4, $5)`,
+        [r.credit_id, r.credit_repayment, balance.outstanding, t.settlementId, result.hash],
       );
     }
   }
   await db.query(`UPDATE payment_runs SET status = 'settled', pain002 = $1, tx_hash = $2, settled_at = $3 WHERE id = $4`,
     [pain002, result.hash, bookedAt, run.id]);
+  await audit(db, 'pago', {
+    run: msgId, tx: result.hash,
+    payments: rows.map((r) => ({ producer: r.producer_name, delivery: r.delivery_ref, net: r.net, repayment: r.credit_repayment })),
+  });
   return { runId: run.id, status: 'settled', txHash: result.hash };
 }

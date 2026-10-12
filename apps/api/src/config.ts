@@ -11,6 +11,9 @@ export interface TestnetKeys {
   issuer: string;
   cooperative: string;
   lender: string;
+  /** Additional demo lenders that can sign disbursements locally. */
+  extraLenders?: string[];
+  /** Producer secrets keyed by account id or address (demo only; the platform never uses them). */
   producers: Record<string, string>;
 }
 

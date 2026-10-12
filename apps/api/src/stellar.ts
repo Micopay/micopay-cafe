@@ -20,29 +20,41 @@ export interface RunPayment {
 }
 
 /**
- * One atomic transaction per payment run: every producer payment and every credit
- * repayment succeed together or none does. A producer can never be paid while the
- * repayment to the lender is skipped.
+ * One atomic transaction with N payments: they all settle or none does.
+ * Payment runs use it so a producer can never be paid while the loan
+ * repayment is skipped; disbursements use it with a single payment.
  *
- * The memo carries the SHA-256 of the pain.001 that ordered the run, so the ISO
- * instruction and the ledger movement point at each other.
+ * The memo carries a SHA-256 of the document behind the movement (the
+ * pain.001 of a run, the canonical terms of a credit), so the off-chain record
+ * and the ledger point at each other.
  */
-export async function buildRunTransaction(params: {
+export async function buildPaymentTransaction(params: {
   source: string;
   asset: Asset;
   payments: RunPayment[];
-  pain001Sha256: string;
+  memoSha256: string;
 }): Promise<Transaction> {
-  if (params.payments.length === 0) throw new Error('la corrida no tiene pagos');
-  if (params.payments.length > 100) throw new Error('una transacción admite hasta 100 operaciones; parte la corrida');
+  if (params.payments.length === 0) throw new Error('la transacción no tiene pagos');
+  if (params.payments.length > 100) throw new Error('una transacción admite hasta 100 operaciones');
   const account = await horizon.loadAccount(params.source);
   const builder = new TransactionBuilder(account, { fee: '1000', networkPassphrase: NETWORK_PASSPHRASE })
-    .addMemo(Memo.hash(params.pain001Sha256))
+    .addMemo(Memo.hash(params.memoSha256))
     .setTimeout(300);
   for (const p of params.payments) {
     builder.addOperation(Operation.payment({ destination: p.destination, asset: params.asset, amount: p.amount }));
   }
   return builder.build();
+}
+
+/** Whether an address exists on the network and can hold `asset` (trustline). */
+export async function accountStatus(address: string, asset: Asset): Promise<'ok' | 'sin_cuenta' | 'sin_trustline'> {
+  try {
+    const account = await horizon.loadAccount(address);
+    const has = account.balances.some((b) => 'asset_code' in b && b.asset_code === asset.getCode() && 'asset_issuer' in b && b.asset_issuer === asset.getIssuer());
+    return has ? 'ok' : 'sin_trustline';
+  } catch {
+    return 'sin_cuenta';
+  }
 }
 
 /**

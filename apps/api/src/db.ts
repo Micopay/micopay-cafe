@@ -20,8 +20,10 @@ CREATE TABLE IF NOT EXISTS producers (
   cooperative_id  INT NOT NULL REFERENCES cooperatives(id),
   name            TEXT NOT NULL,
   community       TEXT,
+  contact         TEXT,
   account_id      VARCHAR(34) NOT NULL UNIQUE,
   stellar_address VARCHAR(56) NOT NULL UNIQUE,
+  is_active       BOOLEAN NOT NULL DEFAULT TRUE,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -33,6 +35,7 @@ CREATE TABLE IF NOT EXISTS products (
   quality_schema JSONB NOT NULL DEFAULT '[]'
 );
 
+-- Daily reference price. The latest row whose valid_from is not in the future applies.
 CREATE TABLE IF NOT EXISTS prices (
   id             SERIAL PRIMARY KEY,
   product_id     INT NOT NULL REFERENCES products(id),
@@ -56,21 +59,35 @@ CREATE TABLE IF NOT EXISTS deduction_rules (
 CREATE TABLE IF NOT EXISTS lenders (
   id              SERIAL PRIMARY KEY,
   name            TEXT NOT NULL,
+  kind            TEXT NOT NULL DEFAULT 'IFNB',
   account_id      VARCHAR(34) NOT NULL UNIQUE,
-  stellar_address VARCHAR(56) NOT NULL UNIQUE
+  stellar_address VARCHAR(56) NOT NULL UNIQUE,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- The loan contract lives here (private); only money movements and hashes go on-chain.
+-- The loan contract lives here (private). On-chain: the disbursement, the
+-- repayments and the SHA-256 of these terms in the disbursement memo.
 CREATE TABLE IF NOT EXISTS credits (
   id                SERIAL PRIMARY KEY,
   reference         VARCHAR(20) NOT NULL UNIQUE,
   producer_id       INT NOT NULL REFERENCES producers(id),
   lender_id         INT NOT NULL REFERENCES lenders(id),
   purpose           TEXT NOT NULL,
-  principal         NUMERIC(14,2) NOT NULL,
+  principal         NUMERIC(14,2) NOT NULL CHECK (principal > 0),
+  annual_rate       NUMERIC(5,2) NOT NULL CHECK (annual_rate >= 0),
+  term_months       INT NOT NULL CHECK (term_months > 0),
+  interest          NUMERIC(14,2) NOT NULL,
+  total_due         NUMERIC(14,2) NOT NULL,
   outstanding       NUMERIC(14,2) NOT NULL,
-  repayment_percent NUMERIC(5,2) NOT NULL,
-  status            VARCHAR(12) NOT NULL DEFAULT 'active',
+  repayment_percent NUMERIC(5,2) NOT NULL CHECK (repayment_percent > 0 AND repayment_percent <= 100),
+  auto_deduct       BOOLEAN NOT NULL DEFAULT TRUE,
+  due_date          DATE NOT NULL,
+  -- pendiente → vigente → pagado; cancelado only before disbursement. "vencido" is derived.
+  status            VARCHAR(12) NOT NULL DEFAULT 'pendiente',
+  terms_json        TEXT NOT NULL,
+  terms_sha256      CHAR(64) NOT NULL,
+  disbursement_tx   CHAR(64),
+  disbursed_at      TIMESTAMPTZ,
   created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -82,6 +99,7 @@ CREATE TABLE IF NOT EXISTS deliveries (
   quantity    NUMERIC(12,2) NOT NULL,
   quality     JSONB NOT NULL DEFAULT '{}',
   lot         TEXT,
+  notes       TEXT,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -117,6 +135,24 @@ CREATE TABLE IF NOT EXISTS settlements (
   uetr             UUID,
   camt054          TEXT
 );
+
+CREATE TABLE IF NOT EXISTS credit_movements (
+  id            SERIAL PRIMARY KEY,
+  credit_id     INT NOT NULL REFERENCES credits(id),
+  kind          VARCHAR(12) NOT NULL,            -- desembolso | abono
+  amount        NUMERIC(14,2) NOT NULL,
+  balance_after NUMERIC(14,2) NOT NULL,
+  settlement_id INT REFERENCES settlements(id),
+  tx_hash       CHAR(64),
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS audit_log (
+  id         SERIAL PRIMARY KEY,
+  action     TEXT NOT NULL,
+  details    JSONB NOT NULL DEFAULT '{}',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 `;
 
 export async function openDb(dataDir?: string): Promise<Db> {
@@ -124,4 +160,8 @@ export async function openDb(dataDir?: string): Promise<Db> {
   const db = new PGlite(dataDir);
   await db.exec(SCHEMA);
   return db;
+}
+
+export async function audit(db: Db, action: string, details: Record<string, unknown> = {}): Promise<void> {
+  await db.query(`INSERT INTO audit_log (action, details) VALUES ($1, $2)`, [action, JSON.stringify(details)]);
 }

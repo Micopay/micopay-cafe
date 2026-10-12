@@ -1,30 +1,113 @@
-/** Manual end-to-end check against a running API on testnet: npx tsx test/e2e.ts */
+/**
+ * End-to-end check against a running API on Stellar testnet (after `npm run seed`):
+ *   npx tsx apps/api/test/e2e.ts
+ * Covers: daily price, producer signup, pay at the scale with quality deduction and
+ * credit repayment, credit lifecycle (create, disburse, cancel, pause), Horizon
+ * verification of both memos, ISO messages against the XSDs, exports and audit.
+ */
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { validateXML } from 'xmllint-wasm';
+
 const API = process.env.API ?? 'http://127.0.0.1:8787/api';
+const HORIZON = 'https://horizon-testnet.stellar.org';
 const XSD = new URL('../../../docs/xsd/', import.meta.url);
-async function j(path: string, body?: unknown) {
-  const res = await fetch(`${API}${path}`, body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : undefined);
+let failures = 0;
+
+function check(ok: boolean, label: string, extra = '') {
+  console.log(`${ok ? 'OK   ' : 'FALLA'} ${label}${extra ? ` · ${extra}` : ''}`);
+  if (!ok) failures++;
+}
+async function j<T = any>(path: string, body?: unknown, method = 'POST'): Promise<T> {
+  const res = await fetch(`${API}${path}`, body === undefined ? undefined : { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
   const data = await res.json();
   if (!res.ok) throw new Error(`${path}: ${JSON.stringify(data)}`);
-  return data;
+  return data as T;
 }
-async function check(path: string, schema: string) {
+async function expectError(path: string, body: unknown, pattern: RegExp, label: string) {
+  const res = await fetch(`${API}${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  const data = (await res.json()) as { error?: string };
+  check(!res.ok && pattern.test(data.error ?? ''), label, data.error);
+}
+async function xsd(path: string, schema: string) {
   const xml = await (await fetch(`${API}${path}`)).text();
   const r = await validateXML({ xml: { fileName: 'm.xml', contents: xml }, schema: { fileName: `${schema}.xsd`, contents: readFileSync(new URL(`${schema}.xsd`, XSD), 'utf8') } });
-  console.log(`${r.valid ? 'VALIDO  ' : 'INVALIDO'} ${schema} ${path}`, r.errors.map((e) => e.rawMessage).join(' | '));
+  check(r.valid, `${schema} válido contra XSD`, r.errors.map((e) => e.rawMessage).join(' | '));
+  return xml;
 }
+async function memoHex(txHash: string) {
+  const tx = (await (await fetch(`${HORIZON}/transactions/${txHash}`)).json()) as { memo_type: string; memo: string; successful: boolean; operation_count: number };
+  return { ...tx, hex: Buffer.from(tx.memo, 'base64').toString('hex') };
+}
+
 for (let i = 0; i < 30; i++) { try { await j('/health'); break; } catch { await new Promise((r) => setTimeout(r, 1000)); } }
-console.log('resumen', await j('/summary'));
-console.log('preview', await j('/deliveries/preview', { producerId: 1, productId: 1, quantity: '250', quality: { humedad: 13.5, defectos: 3 } }));
-const d1 = await j('/deliveries', { producerId: 1, productId: 1, quantity: '250', quality: { humedad: 13.5, defectos: 3 }, lot: 'LOTE-45' });
-const d2 = await j('/deliveries', { producerId: 2, productId: 1, quantity: '180.5', quality: { humedad: 11.8, defectos: 6 } });
-const d3 = await j('/deliveries', { producerId: 3, productId: 2, quantity: '95', quality: { humedad: 7.5 } });
-console.log('entregas', [d1, d2, d3].map((d) => `${d.reference} bruto ${d.gross} neto ${d.net} abono ${d.creditRepayment}`));
-const run = await j('/runs', { settlementIds: [d1.settlementId, d2.settlementId, d3.settlementId] });
-console.log('corrida', run);
-await check(`/runs/${run.runId}/pain001`, 'pain.001.001.09');
-await check(`/runs/${run.runId}/pain002`, 'pain.002.001.10');
-for (const d of [d1, d2, d3]) await check(`/settlements/${d.settlementId}/camt054`, 'camt.054.001.08');
-await check('/statement', 'camt.053.001.08');
-console.log('creditos', (await j('/credits')).map((c: any) => `${c.reference} saldo ${c.outstanding} pagado ${c.repaid}`));
+
+// Daily price
+await j('/prices', { productId: 1, price: '85.00' });
+const products = await j<any[]>('/products');
+check(products[0].price === '85.00', 'precio del día vigente', products[0].price);
+
+// Credits as seeded: Juan disbursed (anchored), María pending
+const credits = await j<any[]>('/credits');
+const juanCredit = credits.find((c) => c.producer === 'Juan Pérez López');
+const mariaCredit = credits.find((c) => c.producer === 'María Hernández Gómez');
+check(juanCredit?.status === 'vigente' && juanCredit.total_due === '21133.33', 'crédito de Juan vigente, total con interés', juanCredit?.total_due);
+check(mariaCredit?.status === 'pendiente', 'crédito de María pendiente');
+const terms = await (await fetch(`${API}/credits/${juanCredit.id}/terms`)).text();
+const disb = await memoHex(juanCredit.disbursement_tx);
+check(disb.memo_type === 'hash' && disb.hex === createHash('sha256').update(terms).digest('hex'), 'memo del desembolso = SHA-256 de los términos');
+
+// Pay Juan at the scale: quality deduction + automatic credit repayment
+const pay = await j('/payments', { producerId: 1, productId: 1, quantity: '250', quality: { humedad: 13.5, defectos: 3 }, lot: 'LOTE-45' });
+check(pay.status === 'settled' && pay.gross === '21250.00' && pay.creditRepayment === '5100.00' && pay.net === '15300.00', 'pago de Juan con castigo y abono', `${pay.net} + ${pay.creditRepayment}`);
+const run = await memoHex(pay.txHash);
+const detail = await j(`/payments/${pay.settlementId}`);
+const pain001 = await xsd(`/runs/${detail.run_id}/pain001`, 'pain.001.001.09');
+check(run.successful && run.operation_count === 2 && run.hex === createHash('sha256').update(pain001).digest('hex'), 'una transacción, 2 operaciones, memo = SHA-256 del pain.001');
+await xsd(`/runs/${detail.run_id}/pain002`, 'pain.002.001.10');
+await xsd(`/payments/${pay.settlementId}/camt054`, 'camt.054.001.08');
+const juanAfter = await j(`/credits/${juanCredit.id}`);
+check(juanAfter.outstanding === '16033.33' && juanAfter.movements.length === 2 && juanAfter.movements[1].tx_hash === pay.txHash, 'movimiento de abono con su hash', juanAfter.outstanding);
+
+// Pause automatic deduction: next payment carries no repayment
+await j(`/credits/${juanCredit.id}`, { autoDeduct: false }, 'PATCH');
+const paused = await j('/payments/preview', { producerId: 1, productId: 1, quantity: '100', quality: {} });
+check(paused.creditRepayment === '0.00', 'con el descuento pausado no hay abono');
+await j(`/credits/${juanCredit.id}`, { autoDeduct: true }, 'PATCH');
+
+// María: cannot repay before disbursement, then disburse, then pay
+const before = await j('/payments/preview', { producerId: 2, productId: 1, quantity: '100', quality: {} });
+check(before.creditRepayment === '0.00', 'un crédito pendiente no se descuenta');
+const dm = await j(`/credits/${mariaCredit.id}/disburse`, {});
+check(/^[0-9a-f]{64}$/.test(dm.txHash), 'desembolso de María en Stellar', dm.txHash.slice(0, 12));
+await expectError(`/credits/${mariaCredit.id}/cancel`, {}, /no se ha desembolsado/, 'no se cancela un crédito ya desembolsado');
+const payM = await j('/payments', { producerId: 2, productId: 1, quantity: '180.5', quality: { humedad: 11.8, defectos: 6 } });
+check(payM.status === 'settled' && Number(payM.creditRepayment) > 0, 'pago de María con abono', payM.creditRepayment);
+
+// New credit for Pedro, cancelled before disbursement
+const due = new Date(); due.setMonth(due.getMonth() + 6);
+const cp = await j('/credits', { producerId: 3, lenderId: 1, purpose: 'Secadora solar', principal: '8000', annualRate: '8.5', termMonths: 6, repaymentPercent: '15', dueDate: due.toISOString().slice(0, 10) });
+await j(`/credits/${cp.id}/cancel`, {});
+check((await j(`/credits/${cp.id}`)).status === 'cancelado', 'crédito cancelado antes del desembolso');
+await expectError('/credits', { producerId: 3, lenderId: 1, purpose: 'x', principal: '0', annualRate: '8', termMonths: 6, repaymentPercent: '10', dueDate: '2030-01-01' }, /.+/, 'rechaza un crédito inválido');
+
+// New producer with a fresh testnet account, paid in cocoa (generic product)
+const acct = await j('/testnet/account', {});
+const np = await j('/producers', { name: 'Rosa Gómez Díaz', community: 'Chilón, Chiapas', stellarAddress: acct.address });
+check(np.account === 'ok', 'alta de productor con cuenta activa', np.accountId);
+await expectError('/producers', { name: 'Duplicado', stellarAddress: acct.address }, /ya hay/, 'no duplica direcciones');
+await expectError('/producers', { name: 'Mala', stellarAddress: 'rN7n7otQDd6FczFgLdlqtyMVrn3e5PcjXd' }, /no es válida/, 'rechaza direcciones XRPL');
+const cacao = await j('/payments', { producerId: np.id, productId: 2, quantity: '95', quality: { humedad: 7.5 } });
+check(cacao.status === 'settled' && cacao.net === '11400.00', 'pago de cacao a productora nueva', cacao.net);
+
+// Reports
+const m = await j('/metrics');
+check(m.kpis.payments === 3 && m.top.length === 3, 'resumen del mes', `${m.kpis.payments} pagos · ${m.kpis.quantity} kg`);
+check((await (await fetch(`${API}/payments.csv`)).text()).split('\n').length === 4, 'exportación de pagos');
+check((await (await fetch(`${API}/credits.csv`)).text()).includes('CR-2026-0003'), 'exportación de cartera');
+const auditLog = await j<any[]>('/audit');
+check(['credito.desembolso', 'pago', 'productor.alta', 'credito.cancelado', 'credito.ajuste', 'precio.del_dia'].every((a) => auditLog.some((x) => x.action === a)), 'bitácora de auditoría');
+await xsd('/statement', 'camt.053.001.08');
+
+console.log(failures ? `\n${failures} verificaciones fallaron` : '\nTodo en orden');
+process.exit(failures ? 1 : 0);
