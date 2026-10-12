@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { NavLink, Route, Routes, useLocation } from 'react-router-dom';
 import { api } from './api';
+import { lang, setLang, t } from './i18n';
 import { mxn, short } from './format';
 import { Icon } from './ui';
 import { useData } from './useData';
@@ -53,11 +54,11 @@ const ADMIN = [
 function Grupo({ titulo, items }: { titulo: string; items: typeof OPERACION }) {
   return (
     <div className="md:mb-3 flex md:flex-col">
-      <div className="hidden md:block px-5 pt-4 pb-1.5 text-[11px] font-bold uppercase tracking-[.14em] text-gris-3">{titulo}</div>
+      <div className="hidden md:block px-5 pt-4 pb-1.5 text-[11px] font-bold uppercase tracking-[.14em] text-gris-3">{t(titulo)}</div>
       {items.map((n) => (
         <NavLink key={n.to} to={n.to} end={n.to === '/' || n.to === '/admin'}
           className={({ isActive }) => `flex items-center gap-3 px-5 py-3 text-[15px] font-bold whitespace-nowrap border-l-4 ${isActive ? 'border-naranja-claro bg-tinta-2 text-papel' : 'border-transparent text-gris-3'}`}>
-          {({ isActive }) => (<><Icon name={n.icon} filled={isActive} /> {n.label}</>)}
+          {({ isActive }) => (<><Icon name={n.icon} filled={isActive} /> {t(n.label)}</>)}
         </NavLink>
       ))}
     </div>
@@ -69,17 +70,17 @@ function Encabezado() {
   return (
     <div className="mb-7 flex flex-wrap items-center justify-between gap-3 border-b-2 border-tinta pb-4">
       <div>
-        <div className="text-[11px] font-bold uppercase tracking-[.14em] text-gris">Compradora de café</div>
+        <div className="text-[11px] font-bold uppercase tracking-[.14em] text-gris">{t('Compradora de café')}</div>
         <div className="font-bold text-[16px]">{s.data?.cooperative.name ?? '…'}</div>
       </div>
       <div className="flex items-center gap-4">
         <div className="text-right">
-          <div className="text-[11px] font-bold uppercase tracking-[.14em] text-gris">Saldo · {s.data?.asset.code ?? ''} · testnet</div>
+          <div className="text-[11px] font-bold uppercase tracking-[.14em] text-gris">{t('Saldo · {code} · testnet', { code: s.data?.asset.code ?? '' })}</div>
           <div className="num font-display text-[22px] font-extrabold text-verde leading-tight">{s.data?.balance ? mxn(s.data.balance) : '—'}</div>
         </div>
-        <button type="button" onClick={s.reload} aria-label="Actualizar saldo" className="rounded-sm border-2 border-tinta bg-papel p-2"><Icon name="history_toggle_off" /></button>
+        <button type="button" onClick={s.reload} aria-label={t('Actualizar saldo')} className="rounded-sm border-2 border-tinta bg-papel p-2"><Icon name="history_toggle_off" /></button>
       </div>
-      {s.data && <div className="w-full text-[12px] text-gris num">Cuenta {short(s.data.cooperative.stellar_address, 8)} · firma {s.data.signer === 'micopay' ? 'desde la app de MicoPay' : 'local de demo (testnet)'}</div>}
+      {s.data && <div className="w-full text-[12px] text-gris num">{t('Cuenta {addr} · firma {signer}', { addr: short(s.data.cooperative.stellar_address, 8), signer: t(s.data.signer === 'micopay' ? 'desde la app de MicoPay' : 'local de demo (testnet)') })}</div>}
     </div>
   );
 }
@@ -93,6 +94,12 @@ function Layout({ children }: { children: ReactNode }) {
           <Grupo titulo="Operación" items={OPERACION} />
           <Grupo titulo="Administración" items={ADMIN} />
         </nav>
+        <div className="hidden md:flex mt-auto px-5 py-4 border-t-2 border-tinta-3 gap-2" role="group" aria-label="Language">
+          {(['es', 'en'] as const).map((l) => (
+            <button key={l} type="button" onClick={() => setLang(l)} aria-pressed={lang === l}
+              className={`rounded-sm border-2 px-3 py-1 text-[13px] font-bold uppercase ${lang === l ? 'bg-papel text-tinta border-papel' : 'border-tinta-3 text-gris-3'}`}>{l}</button>
+          ))}
+        </div>
       </aside>
       <main className="px-4 py-6 md:px-10 md:py-8 max-w-[1200px] w-full">
         <Encabezado />

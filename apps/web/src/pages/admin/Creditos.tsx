@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { t } from '../../i18n';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, type CreditStatus } from '../../api';
 import { BarraPanel, Cargando, Dato, ErrorCaja, EstadoCredito, Panel, Select, Tabla, td, tdNum, Titulo } from '../../comun';
@@ -19,45 +20,45 @@ export default function Creditos() {
 
   return (
     <>
-      <Titulo cintillo="Administración" accion={
+      <Titulo cintillo={t('Administración')} accion={
         <div className="flex gap-3">
-          <a href="/api/credits.csv"><Button variant="ghost"><Icon name="arrow_upward" /> Exportar cartera</Button></a>
-          {!nuevo && <Button onClick={() => setNuevo(true)}><Icon name="add_circle" /> Otorgar crédito</Button>}
+          <a href="/api/credits.csv"><Button variant="ghost"><Icon name="arrow_upward" /> {t('Exportar cartera')}</Button></a>
+          {!nuevo && <Button onClick={() => setNuevo(true)}><Icon name="add_circle" /> {t('Otorgar crédito')}</Button>}
         </div>
-      }>Créditos</Titulo>
+      }>{t('Créditos')}</Titulo>
 
       <p className="max-w-[760px] text-gris mb-6 text-[15px]">
-        El crédito se otorga aquí, el prestamista lo desembolsa en Stellar y se cobra con la cosecha: en cada pago se descuenta el abono y llega
-        al prestamista <b className="text-tinta">en la misma transacción</b>. Los términos son privados; en la cadena queda su huella SHA-256.
+        {t('El crédito se otorga aquí, el prestamista lo desembolsa en Stellar y se cobra con la cosecha: en cada pago se descuenta el abono y llega al prestamista ')}
+        <b className="text-tinta">{t('en la misma transacción')}</b>{t('. Los términos son privados; en la cadena queda su huella SHA-256.')}
       </p>
 
       {nuevo && <Alta productorInicial={params.get('productor')} onClose={() => setNuevo(false)} />}
 
       <div className="grid gap-4 grid-cols-2 md:grid-cols-4 mb-6">
-        <Dato etiqueta="Por recuperar" valor={mxn(sum(['vigente', 'vencido'], 'outstanding'))} tono="text-naranja" />
-        <Dato etiqueta="Vencido" valor={mxn(sum(['vencido'], 'outstanding'))} tono={sum(['vencido'], 'outstanding') ? 'text-rojo' : ''} />
-        <Dato etiqueta="Por desembolsar" valor={mxn(sum(['pendiente'], 'principal'))} />
-        <Dato etiqueta="Créditos vigentes" valor={(all.data ?? []).filter((c) => c.status === 'vigente').length} />
+        <Dato etiqueta={t('Por recuperar')} valor={mxn(sum(['vigente', 'vencido'], 'outstanding'))} tono="text-naranja" />
+        <Dato etiqueta={t('Vencido')} valor={mxn(sum(['vencido'], 'outstanding'))} tono={sum(['vencido'], 'outstanding') ? 'text-rojo' : ''} />
+        <Dato etiqueta={t('Por desembolsar')} valor={mxn(sum(['pendiente'], 'principal'))} />
+        <Dato etiqueta={t('Créditos vigentes')} valor={(all.data ?? []).filter((c) => c.status === 'vigente').length} />
       </div>
 
-      <div className="mb-4 flex flex-wrap gap-2">{FILTROS.map(([v, l]) => <Pill key={v} activa={status === v} onClick={() => setStatus(v)}>{l}</Pill>)}</div>
+      <div className="mb-4 flex flex-wrap gap-2">{FILTROS.map(([v, l]) => <Pill key={v} activa={status === v} onClick={() => setStatus(v)}>{t(l)}</Pill>)}</div>
 
       {all.error && <ErrorCaja mensaje={all.error} />}
       {!all.data ? <Cargando /> : (
         <Panel>
-          <Tabla cabeceras={['Crédito', 'Productor', 'Destino', 'Prestamista', { t: 'Total', derecha: true }, { t: 'Pagado', derecha: true }, { t: 'Saldo', derecha: true }, 'Vence', 'Estado']}
-            vacio={list.length === 0 && 'No hay créditos con ese estado.'}>
+          <Tabla cabeceras={[t('Crédito'), t('Productor'), t('Destino'), t('Prestamista'), { t: t('Total'), derecha: true }, { t: t('Pagado'), derecha: true }, { t: t('Saldo'), derecha: true }, t('Vence'), t('Estado')]}
+            vacio={list.length === 0 && t('No hay créditos con ese estado.')}>
             {list.map((c) => (
               <tr key={c.id}>
                 <td className={`${td} whitespace-nowrap`}><Link to={`/admin/creditos/${c.id}`} className="underline font-bold num">{c.reference}</Link></td>
                 <td className={td}>{c.producer}</td>
-                <td className={td}>{c.purpose}</td>
-                <td className={`${td} text-[13px]`}>{c.lender}</td>
+                <td className={td}>{t(c.purpose)}</td>
+                <td className={`${td} text-[13px]`}>{t(c.lender)}</td>
                 <td className={tdNum}>{mxn(c.total_due)}</td>
                 <td className={`${tdNum} text-verde`}>{mxn(c.repaid)}</td>
                 <td className={`${tdNum} font-bold`}>{mxn(c.outstanding)}</td>
                 <td className={`${td} num whitespace-nowrap`}>{dia(c.due_date)}</td>
-                <td className={td}><EstadoCredito s={c.status} />{!c.auto_deduct && c.status === 'vigente' && <div className="text-[11px] text-gris mt-1">descuento pausado</div>}</td>
+                <td className={td}><EstadoCredito s={c.status} />{!c.auto_deduct && c.status === 'vigente' && <div className="text-[11px] text-gris mt-1">{t('descuento pausado')}</div>}</td>
               </tr>
             ))}
           </Tabla>
@@ -94,30 +95,30 @@ function Alta({ productorInicial, onClose }: { productorInicial: string | null; 
 
   return (
     <Panel sombra className="mb-8">
-      <BarraPanel>Otorgar crédito</BarraPanel>
+      <BarraPanel>{t('Otorgar crédito')}</BarraPanel>
       <div className="p-5 grid gap-4 md:grid-cols-3">
-        <Select etiqueta="Productor" value={f.producerId} onChange={set('producerId')}>
-          <option value="">Elige…</option>{producers.data?.filter((p) => p.is_active).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+        <Select etiqueta={t('Productor')} value={f.producerId} onChange={set('producerId')}>
+          <option value="">{t('Elige…')}</option>{producers.data?.filter((p) => p.is_active).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </Select>
-        <Select etiqueta="Prestamista" value={lenderId} onChange={set('lenderId')}>
-          {lenders.data?.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+        <Select etiqueta={t('Prestamista')} value={lenderId} onChange={set('lenderId')}>
+          {lenders.data?.map((l) => <option key={l.id} value={l.id}>{t(l.name)}</option>)}
         </Select>
-        <TextField etiqueta="Destino" placeholder="Ej. Avío: fertilizante y jornales" value={f.purpose} onChange={set('purpose')} />
-        <TextField etiqueta="Monto (MXN)" inputMode="decimal" className="num" value={f.principal} onChange={set('principal')} />
-        <TextField etiqueta="Tasa anual (%)" inputMode="decimal" className="num" value={f.annualRate} onChange={set('annualRate')} ayuda="Cosechando Soberanía: 8.5%" />
-        <TextField etiqueta="Plazo (meses)" inputMode="numeric" className="num" value={f.termMonths} onChange={set('termMonths')} />
-        <TextField etiqueta="Abono por entrega (%)" inputMode="decimal" className="num" value={f.repaymentPercent} onChange={set('repaymentPercent')} ayuda="Se descuenta de cada liquidación" />
-        <TextField etiqueta="Vencimiento" type="date" value={f.dueDate} onChange={set('dueDate')} />
+        <TextField etiqueta={t('Destino')} placeholder={t('Ej. Avío: fertilizante y jornales')} value={f.purpose} onChange={set('purpose')} />
+        <TextField etiqueta={t('Monto (MXN)')} inputMode="decimal" className="num" value={f.principal} onChange={set('principal')} />
+        <TextField etiqueta={t('Tasa anual (%)')} inputMode="decimal" className="num" value={f.annualRate} onChange={set('annualRate')} ayuda={t('Cosechando Soberanía: 8.5%')} />
+        <TextField etiqueta={t('Plazo (meses)')} inputMode="numeric" className="num" value={f.termMonths} onChange={set('termMonths')} />
+        <TextField etiqueta={t('Abono por entrega (%)')} inputMode="decimal" className="num" value={f.repaymentPercent} onChange={set('repaymentPercent')} ayuda={t('Se descuenta de cada liquidación')} />
+        <TextField etiqueta={t('Vencimiento')} type="date" value={f.dueDate} onChange={set('dueDate')} />
         <div className="rounded-sm border-2 border-tinta bg-fondo p-4 text-[14px]">
-          <div className="flex justify-between"><span className="text-gris">Interés</span><b className="num">{mxn(interest)}</b></div>
-          <div className="flex justify-between mt-1"><span className="text-gris">Total a pagar</span><b className="num text-naranja">{mxn(ok ? principal + interest : 0)}</b></div>
+          <div className="flex justify-between"><span className="text-gris">{t('Interés')}</span><b className="num">{mxn(interest)}</b></div>
+          <div className="flex justify-between mt-1"><span className="text-gris">{t('Total a pagar')}</span><b className="num text-naranja">{mxn(ok ? principal + interest : 0)}</b></div>
         </div>
         {error && <div className="md:col-span-3"><ErrorCaja mensaje={error} /></div>}
         <div className="md:col-span-3 flex gap-3">
-          <Button disabled={busy || !ok || !f.producerId || f.purpose.trim().length < 3} onClick={guardar}>{busy ? 'Guardando…' : 'Registrar crédito'}</Button>
-          <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+          <Button disabled={busy || !ok || !f.producerId || f.purpose.trim().length < 3} onClick={guardar}>{busy ? t('Guardando…') : t('Registrar crédito')}</Button>
+          <Button variant="ghost" onClick={onClose}>{t('Cancelar')}</Button>
         </div>
-        <p className="md:col-span-3 text-[12px] text-gris">Queda <b>pendiente</b> hasta que el prestamista lo desembolse. No se descuenta nada mientras esté pendiente.</p>
+        <p className="md:col-span-3 text-[12px] text-gris">{t('Queda ')}<b>{t('pendiente')}</b>{t(' hasta que el prestamista lo desembolse. No se descuenta nada mientras esté pendiente.')}</p>
       </div>
     </Panel>
   );

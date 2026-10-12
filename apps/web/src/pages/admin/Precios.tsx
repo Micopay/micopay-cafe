@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { t } from '../../i18n';
 import { api } from '../../api';
 import { BarraPanel, Cargando, ErrorCaja, Panel, Subtitulo, Tabla, td, tdNum, Titulo } from '../../comun';
 import { fecha, mxn } from '../../format';
@@ -14,14 +15,14 @@ export default function Precios() {
 
   async function guardar(productId: number, name: string) {
     setError(null); setSaved(null);
-    try { await api.setPrice(productId, draft[productId]!); setSaved(`Precio de ${name} actualizado.`); setDraft({ ...draft, [productId]: '' }); products.reload(); history.reload(); }
+    try { await api.setPrice(productId, draft[productId]!); setSaved(t('Precio de {name} actualizado.', { name: t(name) })); setDraft({ ...draft, [productId]: '' }); products.reload(); history.reload(); }
     catch (e) { setError((e as Error).message); }
   }
 
   return (
     <>
-      <Titulo cintillo="Administración">Precio de referencia</Titulo>
-      <p className="max-w-[720px] text-gris mb-6 text-[15px]">El precio de referencia que se carga en la báscula. En cada compra se negocia (unos centavos arriba o abajo) y el recibo guarda el precio acordado.</p>
+      <Titulo cintillo={t('Administración')}>{t('Precio de referencia')}</Titulo>
+      <p className="max-w-[720px] text-gris mb-6 text-[15px]">{t('El precio de referencia que se carga en la báscula. En cada compra se negocia (unos centavos arriba o abajo) y el recibo guarda el precio acordado.')}</p>
       {error && <div className="mb-4"><ErrorCaja mensaje={error} /></div>}
       {saved && <div className="mb-4 border-2 border-tinta bg-verde-suave px-4 py-3 rounded-sm font-semibold text-[14px]">{saved}</div>}
 
@@ -29,14 +30,14 @@ export default function Precios() {
         <div className="grid gap-5 md:grid-cols-2">
           {products.data.map((p) => (
             <Panel key={p.id} sombra>
-              <BarraPanel>{p.name}</BarraPanel>
+              <BarraPanel>{t(p.name)}</BarraPanel>
               <div className="p-5">
-                <div className="text-[11px] font-bold uppercase tracking-[.12em] text-gris">Vigente {p.price_since ? `desde ${fecha(p.price_since)}` : ''}</div>
-                <div className="num font-display text-[30px] font-extrabold leading-tight">{p.price ? `${mxn(p.price)} / ${p.unit}` : 'Sin precio'}</div>
+                <div className="text-[11px] font-bold uppercase tracking-[.12em] text-gris">{p.price_since ? t('Vigente desde {date}', { date: fecha(p.price_since) }) : ''}</div>
+                <div className="num font-display text-[30px] font-extrabold leading-tight">{p.price ? `${mxn(p.price)} / ${p.unit}` : t('Sin precio')}</div>
                 <div className="mt-4 flex gap-3 items-end">
-                  <div className="flex-1"><TextField etiqueta={`Nuevo precio por ${p.unit} (MXN)`} inputMode="decimal" className="num" value={draft[p.id] ?? ''}
+                  <div className="flex-1"><TextField etiqueta={t('Nuevo precio por {unit} (MXN)', { unit: p.unit })} inputMode="decimal" className="num" value={draft[p.id] ?? ''}
                     onChange={(e) => setDraft({ ...draft, [p.id]: e.target.value.replace(',', '.') })} /></div>
-                  <Button disabled={!/^\d+(\.\d{1,2})?$/.test(draft[p.id] ?? '') || Number(draft[p.id]) <= 0} onClick={() => guardar(p.id, p.name)}>Guardar</Button>
+                  <Button disabled={!/^\d+(\.\d{1,2})?$/.test(draft[p.id] ?? '') || Number(draft[p.id]) <= 0} onClick={() => guardar(p.id, p.name)}>{t('Guardar')}</Button>
                 </div>
               </div>
             </Panel>
@@ -44,11 +45,11 @@ export default function Precios() {
         </div>
       )}
 
-      <Subtitulo>Historial de precios</Subtitulo>
+      <Subtitulo>{t('Historial de precios')}</Subtitulo>
       <Panel>
-        <Tabla cabeceras={['Desde', 'Producto', { t: 'Precio', derecha: true }]}>
+        <Tabla cabeceras={[t('Desde'), t('Producto'), { t: t('Precio'), derecha: true }]}>
           {history.data?.map((h) => (
-            <tr key={h.id}><td className={`${td} num`}>{fecha(h.valid_from)}</td><td className={td}>{h.product}</td><td className={tdNum}>{mxn(h.price)} / {h.unit}</td></tr>
+            <tr key={h.id}><td className={`${td} num`}>{fecha(h.valid_from)}</td><td className={td}>{t(h.product)}</td><td className={tdNum}>{mxn(h.price)} / {h.unit}</td></tr>
           ))}
         </Tabla>
       </Panel>

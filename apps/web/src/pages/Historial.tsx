@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { t } from '../i18n';
 import { Link } from 'react-router-dom';
 import { api, type Payment, type PaymentFilters } from '../api';
 import { Cargando, ErrorCaja, EstadoPago, Panel, Select, Tabla, td, tdNum, Titulo, Tx } from '../comun';
@@ -28,34 +29,34 @@ export default function Historial() {
 
   return (
     <>
-      <Titulo cintillo="Pagos" accion={<a href={api.paymentsCsvUrl(filters)}><Button variant="ghost"><Icon name="arrow_upward" /> Exportar a Excel (CSV)</Button></a>}>Historial de pagos</Titulo>
+      <Titulo cintillo={t('Pagos')} accion={<a href={api.paymentsCsvUrl(filters)}><Button variant="ghost"><Icon name="arrow_upward" /> {t('Exportar a Excel (CSV)')}</Button></a>}>{t('Historial de pagos')}</Titulo>
 
       <Panel className="mb-6 p-4">
         <form className="grid gap-4 md:grid-cols-[1fr_1fr_1fr_1.4fr_auto] items-end" onSubmit={(e) => { e.preventDefault(); setFilters({ ...draft }); }}>
-          <TextField etiqueta="Desde" type="date" value={draft.from ?? ''} onChange={(e) => setDraft({ ...draft, from: e.target.value })} />
-          <TextField etiqueta="Hasta" type="date" value={draft.to ?? ''} onChange={(e) => setDraft({ ...draft, to: e.target.value })} />
-          <Select etiqueta="Estado" value={draft.status ?? ''} onChange={(e) => setDraft({ ...draft, status: e.target.value })}>
-            <option value="">Todos</option><option value="paid">Pagado</option><option value="pending">Rechazado</option>
+          <TextField etiqueta={t('Desde')} type="date" value={draft.from ?? ''} onChange={(e) => setDraft({ ...draft, from: e.target.value })} />
+          <TextField etiqueta={t('Hasta')} type="date" value={draft.to ?? ''} onChange={(e) => setDraft({ ...draft, to: e.target.value })} />
+          <Select etiqueta={t('Estado')} value={draft.status ?? ''} onChange={(e) => setDraft({ ...draft, status: e.target.value })}>
+            <option value="">{t('Todos')}</option><option value="paid">{t('Pagado')}</option><option value="pending">{t('Rechazado')}</option>
           </Select>
-          <Select etiqueta="Productor" value={draft.producerId ?? ''} onChange={(e) => setDraft({ ...draft, producerId: e.target.value ? Number(e.target.value) : undefined })}>
-            <option value="">Todos</option>{producers.data?.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          <Select etiqueta={t('Productor')} value={draft.producerId ?? ''} onChange={(e) => setDraft({ ...draft, producerId: e.target.value ? Number(e.target.value) : undefined })}>
+            <option value="">{t('Todos')}</option>{producers.data?.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </Select>
-          <Button type="submit">Aplicar</Button>
+          <Button type="submit">{t('Aplicar')}</Button>
         </form>
       </Panel>
 
       {page.error && <ErrorCaja mensaje={page.error} />}
       {!page.data ? <Cargando /> : (
         <Panel>
-          <Tabla cabeceras={['Fecha', 'Productor', 'Entrega', { t: 'Cantidad', derecha: true }, { t: 'Bruto', derecha: true }, { t: 'Castigos', derecha: true }, { t: 'Abono', derecha: true }, { t: 'Pagado', derecha: true }, 'Estado', 'Stellar']}
-            vacio={rows.length === 0 && 'Sin pagos para los filtros seleccionados.'}>
+          <Tabla cabeceras={[t('Fecha'), t('Productor'), t('Entrega'), { t: t('Cantidad'), derecha: true }, { t: t('Bruto'), derecha: true }, { t: t('Castigos'), derecha: true }, { t: t('Abono'), derecha: true }, { t: t('Pagado'), derecha: true }, t('Estado'), 'Stellar']}
+            vacio={rows.length === 0 && t('Sin pagos para los filtros seleccionados.')}>
             {rows.map((p) => {
               const castigos = p.deductions.reduce((a, d) => a + Number(d.amount), 0);
               return (
                 <tr key={p.id}>
                   <td className={`${td} num whitespace-nowrap`}>{fecha(p.created_at)}</td>
                   <td className={td}><span className="font-bold">{p.producer}</span></td>
-                  <td className={`${td} whitespace-nowrap`}><Link to={`/historial/${p.id}`} className="underline num font-bold">{p.reference}</Link><div className="text-[12px] text-gris">{p.product}</div></td>
+                  <td className={`${td} whitespace-nowrap`}><Link to={`/historial/${p.id}`} className="underline num font-bold">{p.reference}</Link><div className="text-[12px] text-gris">{t(p.product)}</div></td>
                   <td className={tdNum}>{qty(p.quantity)} {p.unit}</td>
                   <td className={tdNum}>{mxn(p.gross)}</td>
                   <td className={`${tdNum} text-rojo`}>{castigos ? `− ${mxn(castigos)}` : '—'}</td>
@@ -67,7 +68,7 @@ export default function Historial() {
               );
             })}
           </Tabla>
-          {more && rows.length > 0 && <div className="p-3 border-t border-linea"><Button variant="ghost" onClick={cargarMas}>Cargar más…</Button></div>}
+          {more && rows.length > 0 && <div className="p-3 border-t border-linea"><Button variant="ghost" onClick={cargarMas}>{t('Cargar más…')}</Button></div>}
         </Panel>
       )}
     </>

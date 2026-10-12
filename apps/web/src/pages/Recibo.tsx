@@ -1,4 +1,5 @@
 import { useParams } from 'react-router-dom';
+import { t } from '../i18n';
 import { api } from '../api';
 import { Cargando, ErrorCaja } from '../comun';
 import { fecha, mxn, qty, short } from '../format';
@@ -17,43 +18,43 @@ export default function Recibo() {
   return (
     <div className="grid gap-5">
       <MoneyBlock
-        etiqueta={pagado ? `Recibiste · ${fecha(r.settled_at ?? r.created_at)}` : 'Por recibir'}
+        etiqueta={pagado ? t('Recibiste · {date}', { date: fecha(r.settled_at ?? r.created_at) }) : t('Por recibir')}
         cifra={mxn(r.net)}
         tipo="saldo"
         pie={<>{r.producer} · {r.community}</>}
       />
 
       <Card>
-        <Label>Tu entrega {r.reference}</Label>
+        <Label>{t('Tu entrega {ref}', { ref: r.reference })}</Label>
         <dl className="mt-4 grid gap-2.5 text-[15px]">
-          <Fila etiqueta={`${qty(r.quantity)} ${r.unit} ${r.product.toLowerCase()} × ${mxn(r.unit_price)}`} valor={mxn(r.gross)} />
-          {r.deductions.map((d) => <Fila key={d.reason} etiqueta={`Castigo: ${d.label}`} valor={`− ${mxn(d.amount)}`} tono="text-rojo" />)}
-          {Number(r.credit_repayment) > 0 && <Fila etiqueta={`Abono a tu crédito ${r.credit_ref}`} valor={`− ${mxn(r.credit_repayment)}`} tono="text-naranja" />}
-          <div className="border-t-2 border-tinta pt-2.5"><Fila etiqueta="Recibiste" valor={mxn(r.net)} tono="text-verde font-extrabold" /></div>
+          <Fila etiqueta={`${qty(r.quantity)} ${r.unit} ${t(r.product).toLowerCase()} × ${mxn(r.unit_price)}`} valor={mxn(r.gross)} />
+          {r.deductions.map((d) => <Fila key={d.reason} etiqueta={t('Castigo: {label}', { label: d.label })} valor={`− ${mxn(d.amount)}`} tono="text-rojo" />)}
+          {Number(r.credit_repayment) > 0 && <Fila etiqueta={t('Abono a tu crédito {ref}', { ref: r.credit_ref ?? '' })} valor={`− ${mxn(r.credit_repayment)}`} tono="text-naranja" />}
+          <div className="border-t-2 border-tinta pt-2.5"><Fila etiqueta={t('Recibiste')} valor={mxn(r.net)} tono="text-verde font-extrabold" /></div>
         </dl>
         {r.credit_ref && r.credit_outstanding && (
-          <p className="mt-3 text-[13px] text-gris">Te quedan <b className="text-tinta num">{mxn(r.credit_outstanding)}</b> por pagar del crédito {r.credit_ref}.</p>
+          <p className="mt-3 text-[13px] text-gris num">{t('Te quedan {amount} por pagar del crédito {ref}.', { amount: mxn(r.credit_outstanding), ref: r.credit_ref })}</p>
         )}
       </Card>
 
       <Card plana>
-        <Label>Cómo cobrar</Label>
+        <Label>{t('Cómo cobrar')}</Label>
         <ul className="mt-3 grid gap-2.5 text-[14px]">
-          <li className="flex gap-2.5"><Icon name="account_balance_wallet" className="text-verde" /> Déjalo en tu app de MicoPay, en pesos digitales.</li>
-          <li className="flex gap-2.5"><Icon name="account_balance" className="text-verde" /> Mándalo a tu banco por SPEI.</li>
-          <li className="flex gap-2.5"><Icon name="payments" className="text-naranja" /> Cámbialo a efectivo con un agente de la Red MicoPay, o ahí mismo si tu compradora es agente.</li>
+          <li className="flex gap-2.5"><Icon name="account_balance_wallet" className="text-verde" /> {t('Déjalo en tu app de MicoPay, en pesos digitales.')}</li>
+          <li className="flex gap-2.5"><Icon name="account_balance" className="text-verde" /> {t('Mándalo a tu banco por SPEI.')}</li>
+          <li className="flex gap-2.5"><Icon name="payments" className="text-naranja" /> {t('Cámbialo a efectivo con un agente de la Red MicoPay, o ahí mismo si tu compradora es agente.')}</li>
         </ul>
       </Card>
 
       {pagado && r.tx_hash && (
         <Card plana className="text-[13px]">
-          <Label>Comprobante</Label>
-          <p className="mt-3 text-gris">Este pago está registrado en Stellar y nadie puede cambiarlo.</p>
+          <Label>{t('Comprobante')}</Label>
+          <p className="mt-3 text-gris">{t('Este pago está registrado en Stellar y nadie puede cambiarlo.')}</p>
           <a href={`https://stellar.expert/explorer/testnet/tx/${r.tx_hash}`} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 font-bold text-verde underline num">
-            Verificar {short(r.tx_hash, 8)} <Icon name="open_in_new" size={16} />
+            {t('Verificar {hash}', { hash: short(r.tx_hash, 8) })} <Icon name="open_in_new" size={16} />
           </a>
-          <div className="mt-2"><a href={`/api/payments/${r.id}/camt054`} target="_blank" rel="noreferrer" className="underline">Aviso bancario ISO 20022 (camt.054)</a></div>
-          <div className="mt-1 text-gris num break-all">Referencia de rastreo (UETR): {r.uetr}</div>
+          <div className="mt-2"><a href={`/api/payments/${r.id}/camt054`} target="_blank" rel="noreferrer" className="underline">{t('Aviso bancario ISO 20022 (camt.054)')}</a></div>
+          <div className="mt-1 text-gris num break-all">{t('Referencia de rastreo (UETR): {uetr}', { uetr: r.uetr ?? '' })}</div>
         </Card>
       )}
     </div>

@@ -1,4 +1,5 @@
 import type { ReactNode, SelectHTMLAttributes } from 'react';
+import { t } from './i18n';
 import type { CreditStatus } from './api';
 import { short } from './format';
 import { Badge, Icon } from './ui';
@@ -26,7 +27,7 @@ export function Subtitulo({ children, accion }: { children: ReactNode; accion?: 
   );
 }
 
-export const Cargando = () => <p className="text-gris text-[15px]">Cargando…</p>;
+export const Cargando = () => <p className="text-gris text-[15px]">{t('Cargando…')}</p>;
 
 export function ErrorCaja({ mensaje }: { mensaje: string }) {
   return <div role="alert" className="border-2 border-rojo bg-rojo-suave text-rojo px-4 py-3 font-semibold text-[14px] rounded-sm">{mensaje}</div>;
@@ -84,10 +85,10 @@ const CREDIT: Record<CreditStatus, ['tinta' | 'naranja' | 'verde' | 'papel' | 'a
   pagado: ['verde', 'Pagado'],
   cancelado: ['papel', 'Cancelado'],
 };
-export const EstadoCredito = ({ s }: { s: CreditStatus }) => <Badge tono={CREDIT[s][0]}>{CREDIT[s][1]}</Badge>;
+export const EstadoCredito = ({ s }: { s: CreditStatus }) => <Badge tono={CREDIT[s][0]}>{t(CREDIT[s][1])}</Badge>;
 
 const PAGO: Record<string, ['verde' | 'aviso', string]> = { paid: ['verde', 'Pagado'], pending: ['aviso', 'Rechazado'], in_run: ['aviso', 'Enviando'] };
-export const EstadoPago = ({ s }: { s: string }) => <Badge tono={PAGO[s]?.[0] ?? 'aviso'}>{PAGO[s]?.[1] ?? s}</Badge>;
+export const EstadoPago = ({ s }: { s: string }) => <Badge tono={PAGO[s]?.[0] ?? 'aviso'}>{t(PAGO[s]?.[1] ?? s)}</Badge>;
 
 /** Link to stellar.expert for a transaction hash. */
 export function Tx({ hash, n = 6 }: { hash: string | null | undefined; n?: number }) {

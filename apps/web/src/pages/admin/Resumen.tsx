@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { locale, t } from '../../i18n';
 import { api, type Metrics } from '../../api';
 import { BarraPanel, Cargando, Dato, ErrorCaja, Panel, Subtitulo, Tabla, td, tdNum, Titulo } from '../../comun';
 import { hoy, mxn, qty } from '../../format';
@@ -12,25 +13,25 @@ export default function Resumen() {
 
   return (
     <>
-      <Titulo cintillo="Administración" accion={<div className="w-[200px]"><TextField etiqueta="Mes" type="month" value={month} onChange={(e) => setMonth(e.target.value)} /></div>}>Resumen del mes</Titulo>
+      <Titulo cintillo={t('Administración')} accion={<div className="w-[200px]"><TextField etiqueta={t('Mes')} type="month" value={month} onChange={(e) => setMonth(e.target.value)} /></div>}>{t('Resumen del mes')}</Titulo>
       {m.error && <ErrorCaja mensaje={m.error} />}
       {!m.data || !k ? <Cargando /> : (
         <>
           <div className="grid gap-4 grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
-            <Dato etiqueta="Pagado a productores" valor={mxn(k.paid)} tono="text-verde" />
-            <Dato etiqueta="Pagos" valor={k.payments} />
-            <Dato etiqueta="Kilos" valor={`${qty(k.quantity)} kg`} />
-            <Dato etiqueta="Productores" valor={k.producers} />
-            <Dato etiqueta="Precio promedio" valor={k.avg_price ? `${mxn(k.avg_price)}/kg` : '—'} />
-            <Dato etiqueta="Abonos a crédito" valor={mxn(k.repayments)} tono="text-naranja" />
+            <Dato etiqueta={t('Pagado a productores')} valor={mxn(k.paid)} tono="text-verde" />
+            <Dato etiqueta={t('Pagos')} valor={k.payments} />
+            <Dato etiqueta={t('Kilos')} valor={`${qty(k.quantity)} kg`} />
+            <Dato etiqueta={t('Productores')} valor={k.producers} />
+            <Dato etiqueta={t('Precio promedio')} valor={k.avg_price ? `${mxn(k.avg_price)}/kg` : '—'} />
+            <Dato etiqueta={t('Abonos a crédito')} valor={mxn(k.repayments)} tono="text-naranja" />
           </div>
 
-          <Subtitulo>Pagado por día</Subtitulo>
+          <Subtitulo>{t('Pagado por día')}</Subtitulo>
           <Panel className="p-5"><GraficaDias data={m.data} /></Panel>
 
-          <Subtitulo>Top 5 productores del mes (por kg)</Subtitulo>
+          <Subtitulo>{t('Top 5 productores del mes (por kg)')}</Subtitulo>
           <Panel>
-            <Tabla cabeceras={['#', 'Productor', { t: 'Kilos', derecha: true }, { t: 'Pagado', derecha: true }]} vacio={m.data.top.length === 0 && 'Sin pagos este mes.'}>
+            <Tabla cabeceras={['#', t('Productor'), { t: t('Kilos'), derecha: true }, { t: t('Pagado'), derecha: true }]} vacio={m.data.top.length === 0 && t('Sin pagos este mes.')}>
               {m.data.top.map((t, i) => (
                 <tr key={t.producer}><td className={`${td} num`}>{i + 1}</td><td className={`${td} font-bold`}>{t.producer}</td><td className={tdNum}>{qty(t.quantity)} kg</td><td className={tdNum}>{mxn(t.paid)}</td></tr>
               ))}
@@ -62,22 +63,22 @@ function GraficaDias({ data }: { data: Metrics }) {
   const ticks = Array.from({ length: Math.round(top / step) + 1 }, (_, i) => i * step);
   const h = hover !== null ? days[hover - 1] : null;
 
-  if (data.byDay.length === 0) return <p className="text-gris text-[14px]">Sin pagos este mes.</p>;
+  if (data.byDay.length === 0) return <p className="text-gris text-[14px]">{t('Sin pagos este mes.')}</p>;
 
   return (
     <div>
       <div className="mb-2 flex justify-end">
-        <button type="button" className="text-[13px] font-bold underline" onClick={() => setTabla(!tabla)}>{tabla ? 'Ver gráfica' : 'Ver como tabla'}</button>
+        <button type="button" className="text-[13px] font-bold underline" onClick={() => setTabla(!tabla)}>{t(tabla ? 'Ver gráfica' : 'Ver como tabla')}</button>
       </div>
       {tabla ? (
-        <Tabla cabeceras={['Día', { t: 'Pagos', derecha: true }, { t: 'Kilos', derecha: true }, { t: 'Pagado', derecha: true }]}>
+        <Tabla cabeceras={[t('Día'), { t: t('Pagos'), derecha: true }, { t: t('Kilos'), derecha: true }, { t: t('Pagado'), derecha: true }]}>
           {data.byDay.map((d) => (
             <tr key={d.day}><td className={`${td} num`}>{d.day}</td><td className={tdNum}>{d.payments}</td><td className={tdNum}>{qty(d.quantity)} kg</td><td className={tdNum}>{mxn(d.paid)}</td></tr>
           ))}
         </Tabla>
       ) : (
         <div className="relative">
-          <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" role="img" aria-label={`Monto pagado por día en ${data.month}`} onMouseLeave={() => setHover(null)}>
+          <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" role="img" aria-label={t('Monto pagado por día en {month}', { month: data.month })} onMouseLeave={() => setHover(null)}>
             {ticks.map((t) => (
               <g key={t}>
                 <line x1={L} x2={W - R} y1={yOf(t)} y2={yOf(t)} stroke="var(--color-linea)" strokeWidth={t === 0 ? 1.5 : 1} />
@@ -101,8 +102,8 @@ function GraficaDias({ data }: { data: Metrics }) {
           {h && (
             <div className="pointer-events-none absolute top-0 rounded-sm border-2 border-tinta bg-papel px-3 py-2 text-[13px] shadow-solida-sm"
               style={{ left: `clamp(0px, calc(${((L + (h.n - 0.5) * pw) / W) * 100}% - 80px), calc(100% - 170px))`, width: 170 }}>
-              <div className="font-bold">{h.n} de {new Date(Date.UTC(y, mo - 1, h.n)).toLocaleDateString('es-MX', { month: 'long', timeZone: 'UTC' })}</div>
-              {h.d ? (<><div className="num">{mxn(h.d.paid)}</div><div className="text-gris num">{h.d.payments} pagos · {qty(h.d.quantity)} kg</div></>) : <div className="text-gris">Sin pagos</div>}
+              <div className="font-bold">{new Date(Date.UTC(y, mo - 1, h.n)).toLocaleDateString(locale, { day: 'numeric', month: 'long', timeZone: 'UTC' })}</div>
+              {h.d ? (<><div className="num">{mxn(h.d.paid)}</div><div className="text-gris num">{t('{n} pagos · {kg} kg', { n: h.d.payments, kg: qty(h.d.quantity) })}</div></>) : <div className="text-gris">{t('Sin pagos')}</div>}
             </div>
           )}
         </div>
@@ -115,4 +116,4 @@ function niceStep(raw: number): number {
   const p = 10 ** Math.floor(Math.log10(raw));
   return [1, 2, 2.5, 5, 10].map((m) => m * p).find((s) => s >= raw) ?? 10 * p;
 }
-const compact = (v: number) => (v >= 1000 ? `$${(v / 1000).toLocaleString('es-MX', { maximumFractionDigits: 1 })}k` : `$${v}`);
+const compact = (v: number) => (v >= 1000 ? `$${(v / 1000).toLocaleString(locale, { maximumFractionDigits: 1 })}k` : `$${v}`);
