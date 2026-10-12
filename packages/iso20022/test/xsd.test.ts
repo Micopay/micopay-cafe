@@ -165,3 +165,16 @@ describe('control negativo: el validador sí detecta errores', () => {
     expect(result.valid).toBe(false);
   });
 });
+
+describe('estado de cuenta con movimientos ajenos a una corrida', () => {
+  it('camt.053 con un fondeo sin referencias ISO sigue siendo válido', async () => {
+    const funding: Entry = { amount: '500000.00', direction: 'CRDT', bookedAt: NOW, remittance: 'Fondeo de capital de trabajo', settlement: { ...SETTLEMENT, txHash: 'c'.repeat(64) } };
+    await expectValid(
+      buildCamt053({
+        msgId: 'STM-1', statementId: 'S-1', createdAt: NOW, from: NOW, to: NOW, account: COOP.account, accountOwner: COOP.name,
+        currency: 'MXN', openingBalance: '0.00', closingBalance: '484600.00', entries: [funding, entry('DBIT', '15400.00')],
+      }),
+      'camt.053.001.08',
+    );
+  });
+});

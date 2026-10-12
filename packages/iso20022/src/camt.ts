@@ -13,11 +13,12 @@ export interface Entry {
   /** CRDT = money in (producer receipt), DBIT = money out (cooperative payment). */
   direction: 'CRDT' | 'DBIT';
   bookedAt: Date;
-  endToEndId: string;
-  uetr: string;
+  /** Present when the movement comes from one of our payment runs. */
+  endToEndId?: string;
+  uetr?: string;
   instrId?: string;
-  debtor: Party;
-  creditor: Party;
+  debtor?: Party;
+  creditor?: Party;
   /** Short human summary, e.g. "Liquidación ENT-2026-000123 · 250 kg café pergamino". */
   remittance?: string;
   settlement: SettlementInfo;
@@ -37,19 +38,23 @@ function entryNode(e: Entry, ccy: string): Node {
     ]),
     el('NtryDtls', [
       el('TxDtls', opt(
-        el('Refs', opt(
-          e.instrId ? el('InstrId', assertMax35(e.instrId, 'InstrId')) : null,
-          el('EndToEndId', assertMax35(e.endToEndId, 'EndToEndId')),
-          el('UETR', e.uetr),
-        )),
+        e.endToEndId || e.uetr
+          ? el('Refs', opt(
+              e.instrId ? el('InstrId', assertMax35(e.instrId, 'InstrId')) : null,
+              e.endToEndId ? el('EndToEndId', assertMax35(e.endToEndId, 'EndToEndId')) : null,
+              e.uetr ? el('UETR', e.uetr) : null,
+            ))
+          : null,
         el('Amt', amount(e.amount), { Ccy: ccy }),
         el('CdtDbtInd', e.direction),
-        el('RltdPties', [
-          el('Dbtr', [partyNode('Pty', e.debtor.name)]),
-          accountNode('DbtrAcct', e.debtor.account),
-          el('Cdtr', [partyNode('Pty', e.creditor.name)]),
-          accountNode('CdtrAcct', e.creditor.account),
-        ]),
+        e.debtor || e.creditor
+          ? el('RltdPties', opt(
+              e.debtor ? el('Dbtr', [partyNode('Pty', e.debtor.name)]) : null,
+              e.debtor ? accountNode('DbtrAcct', e.debtor.account) : null,
+              e.creditor ? el('Cdtr', [partyNode('Pty', e.creditor.name)]) : null,
+              e.creditor ? accountNode('CdtrAcct', e.creditor.account) : null,
+            ))
+          : null,
         e.remittance ? el('RmtInf', [el('Ustrd', e.remittance.slice(0, 140))]) : null,
         settlementNode(e.settlement),
       )),
