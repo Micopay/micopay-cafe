@@ -7,11 +7,14 @@ import { openDb } from './db.js';
 import { executeRun } from './runs.js';
 import { settle, type DeductionRule } from './settlement.js';
 import { buildStatement } from './statement.js';
-import { assetBalance, explorerTx, LocalSigner } from './stellar.js';
+import { assetBalance, explorerTx, LocalSigner, MicopaySigner, type Signer } from './stellar.js';
 
 const keys = loadKeys();
 const asset = settlementAsset(keys);
-const signer = new LocalSigner(Keypair.fromSecret(keys.cooperative));
+// MICOPAY_API + MICOPAY_DEVICE_KEY + MICOPAY_IDENTIFIER switch signing to the MicoPay app.
+const signer: Signer = process.env.MICOPAY_DEVICE_KEY && process.env.MICOPAY_API && process.env.MICOPAY_IDENTIFIER
+  ? new MicopaySigner({ apiUrl: process.env.MICOPAY_API, deviceKey: process.env.MICOPAY_DEVICE_KEY, identifier: process.env.MICOPAY_IDENTIFIER })
+  : new LocalSigner(Keypair.fromSecret(keys.cooperative));
 const NETWORK = 'TESTNET' as const;
 const db = await openDb(PG_DIR);
 

@@ -63,6 +63,49 @@ export class LocalSigner implements Signer {
   }
 }
 
+/**
+ * Signs from the cooperative's MicoPay app through the MicoPay backend's
+ * /sign-requests (device-key authenticated, push to the app, approval screen).
+ *
+ * Requires the backend to return `signed_xdr` from GET /sign-requests/:id once
+ * signed — today it only returns { txid, account }, and nobody submits the
+ * transaction, so the platform must receive the XDR to send it to Horizon.
+ */
+export class MicopaySigner implements Signer {
+  readonly kind = 'micopay' as const;
+  constructor(private readonly opts: { apiUrl: string; deviceKey: string; identifier: string; timeoutMs?: number; pollMs?: number }) {}
+
+  async sign(tx: Transaction): Promise<Transaction> {
+    const headers = { authorization: `Bearer ${this.opts.deviceKey}`, 'content-type': 'application/json' };
+    const created = await fetch(`${this.opts.apiUrl}/sign-requests`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        txxdr: tx.toXDR(),
+        identifier: this.opts.identifier,
+        instruction: 'MicoPay Café: pagar corrida a productores',
+        kind: 'transaction',
+        expire_minutes: 5,
+      }),
+    });
+    if (!created.ok) throw new Error(`MicoPay no aceptó la solicitud de firma (${created.status})`);
+    const { id } = (await created.json()) as { id: string };
+
+    const deadline = Date.now() + (this.opts.timeoutMs ?? 5 * 60_000);
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, this.opts.pollMs ?? 2000));
+      const res = await fetch(`${this.opts.apiUrl}/sign-requests/${id}`, { headers });
+      if (!res.ok) continue;
+      const s = (await res.json()) as { resolved: boolean; signed: boolean; cancelled: boolean; expired: boolean; signed_xdr?: string };
+      if (!s.resolved) continue;
+      if (s.signed && s.signed_xdr) return TransactionBuilder.fromXDR(s.signed_xdr, NETWORK_PASSPHRASE) as Transaction;
+      if (s.signed) throw new Error('La app firmó, pero el backend de MicoPay no devuelve signed_xdr');
+      throw new Error(s.cancelled ? 'La firma se rechazó en la app de MicoPay' : 'La solicitud de firma expiró');
+    }
+    throw new Error('No llegó la firma de la app de MicoPay a tiempo');
+  }
+}
+
 export interface SubmitResult {
   successful: boolean;
   hash: string;
