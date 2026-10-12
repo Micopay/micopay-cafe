@@ -1,6 +1,6 @@
 import { useParams } from 'react-router-dom';
 import { api } from '../api';
-import { Cargando, ErrorCaja } from '../App';
+import { Cargando, ErrorCaja } from '../comun';
 import { fecha, mxn, qty, short } from '../format';
 import { Card, Icon, Label, MoneyBlock } from '../ui';
 import { useData } from '../useData';
@@ -8,7 +8,7 @@ import { useData } from '../useData';
 /* Lo que ve el productor en su teléfono: cuánto entregó, cómo se calculó y cómo cobrar. */
 export default function Recibo() {
   const { id } = useParams();
-  const s = useData(() => api.settlement(Number(id)), [id]);
+  const s = useData(() => api.payment(Number(id)), [id]);
   if (s.error) return <ErrorCaja mensaje={s.error} />;
   if (!s.data) return <Cargando />;
   const r = s.data;
@@ -52,7 +52,7 @@ export default function Recibo() {
           <a href={`https://stellar.expert/explorer/testnet/tx/${r.tx_hash}`} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 font-bold text-verde underline num">
             Verificar {short(r.tx_hash, 8)} <Icon name="open_in_new" size={16} />
           </a>
-          <div className="mt-2"><a href={`/api/settlements/${r.id}/camt054`} target="_blank" rel="noreferrer" className="underline">Aviso bancario ISO 20022 (camt.054)</a></div>
+          <div className="mt-2"><a href={`/api/payments/${r.id}/camt054`} target="_blank" rel="noreferrer" className="underline">Aviso bancario ISO 20022 (camt.054)</a></div>
           <div className="mt-1 text-gris num break-all">Referencia de rastreo (UETR): {r.uetr}</div>
         </Card>
       )}

@@ -18,15 +18,33 @@ It is part of the [MicoPay](https://github.com/Micopay) ecosystem: producers rec
 
 ## What it does
 
-| Step | What happens | Where |
-|---|---|---|
-| 1. Weigh | The operator records a delivery: producer, product, kilos, humidity, defects | Web panel |
-| 2. Settle | Live settlement: `kilos × price − quality deduction − credit repayment`, rounded once to cents | API, `settlement.ts` |
-| 3. Order | A **pain.001** (Customer Credit Transfer Initiation) is built with kilos, price, deductions and repayment in structured remittance | `packages/iso20022` |
-| 4. Pay | **One Stellar transaction** pays every producer and sends the repayments to the lender. All or nothing: a producer can never be paid while the loan repayment is skipped | API, `stellar.ts` |
-| 5. Anchor | The transaction memo is the **SHA-256 of the pain.001**: anyone can hash the document and compare it with the ledger | Stellar memo |
-| 6. Report | **pain.002** (status), **camt.054** (producer receipt) and **camt.053** (statement with balances reconstructed from Horizon) | Web + XML downloads |
-| 7. Cash out | The producer sees a phone receipt and cashes out through the MicoPay app (digital, SPEI or cash agent) | `/recibo/:id` |
+Two areas, mirroring the original desktop apps (operator + admin) of [coffee-payments](https://github.com/Micopay/coffee-payments):
+
+**Operation**
+| Screen | What happens |
+|---|---|
+| **Realizar pago** | Pay at the scale: pick the producer, weigh, the daily price loads by default (overrides are audited), optional quality readings apply tiered deductions, confirm — the producer is paid **immediately** in one Stellar transaction |
+| **Productores** | Search, sign-up (validates the Stellar address and whether the account can receive MXNe), profile with delivery history and credits |
+| **Historial** | Filters by date, status and producer; payment detail with the ISO 20022 documents, retry of rejected payments, CSV export, producer receipt |
+
+**Administration**
+| Screen | What happens |
+|---|---|
+| **Resumen del mes** | KPIs, amount paid per day, top 5 producers by kg |
+| **Precio del día** | Reference price per product, with history |
+| **Créditos** | Crop-loan portfolio — see the lifecycle below |
+| **Prestamistas** | Who funds the loans (IFNB / SOFOM / bank on FIRA funding, or the cooperative as disperser), balances and portfolio |
+| **Auditoría** | Audit log of every action, day close (`camt.053`), CSV exports |
+
+### Crop-loan lifecycle
+
+1. **Grant** — producer, lender, purpose, principal, annual rate, term, repayment % per delivery, due date. Interest is fixed at origination; the loan is *pendiente*.
+2. **Disburse** — the lender pays the producer on Stellar. The memo is the **SHA-256 of the canonical loan terms** (downloadable as JSON), so the contract is anchored next to the money. Status: *vigente*.
+3. **Repay with the harvest** — each payment deducts the repayment and sends it to the lender **in the same atomic transaction** that pays the producer. Every repayment is a movement with its transaction hash.
+4. **Administer** — pause/resume the automatic deduction, change the repayment %, cancel before disbursement. *Vencido* is derived when the due date passes with balance; *pagado* when the balance reaches zero.
+
+### Every payment, end to end
+`kilos × price − quality deduction − loan repayment` → **pain.001** with kilos, price, deductions and repayment in structured remittance → its SHA-256 becomes the memo of **one Stellar transaction** (producer + lender, all or nothing) → **pain.002** status → **camt.054** receipt for the producer → **camt.053** statement with balances reconstructed from Horizon.
 
 ### Why Stellar
 
@@ -65,23 +83,23 @@ npm run dev:api            # http://127.0.0.1:8787
 npm run dev:web            # http://localhost:5180
 ```
 
-Then: **Registrar entrega** → **Por pagar** → **Firmar y pagar en Stellar** → open the transaction on stellar.expert and the ISO documents under **Corridas**.
+Then: **Realizar pago** → pick Juan Pérez (he has a disbursed loan) → weigh 250 kg with 13.5% humidity → **Ejecutar pago**. Open the transaction on stellar.expert and the ISO documents under **Historial**; follow the loan under **Créditos** (María's is pending: disburse it from there).
 
 ```bash
 npm test                   # ISO 20022 messages vs official XSDs + settlement math
-npx tsx apps/api/test/e2e.ts   # end-to-end against testnet (API must be running)
+npx tsx apps/api/test/e2e.ts   # 26 end-to-end checks against testnet (API must be running, fresh seed)
 ```
 
 Testnet keys are written to `data/testnet-keys.json`, which is git-ignored. Testnet only — never real funds.
 
 ## Status and roadmap
 
-Working today on testnet: deliveries, live settlement with quality deductions and credit repayment, atomic payment runs, ISO 20022 messages, receipts, statements.
+Working today on testnet: pay at the scale, producers, daily price, quality deductions, crop-loan administration (grant, anchored disbursement, automatic repayment, pause, cancel), ISO 20022 messages, receipts, monthly summary, audit log, day close and exports.
 
 Next:
 1. Sign-in and signing with the MicoPay app (`/sign-requests`), replacing the local demo signer.
 2. Shared users with the MicoPay backend on AWS (identity = Stellar address).
-3. Credit module for cooperatives acting as FIRA credit dispersers: disbursement, schedules, lender reporting.
+3. Operator roles and sign-in (the original app had operator/admin accounts), and lender reporting for FIRA credit dispersers.
 4. Monthly anchoring of the credit portfolio hash on Stellar.
 5. Optional quality escrow (Soroban), shared with MicoPay's rental platform.
 
