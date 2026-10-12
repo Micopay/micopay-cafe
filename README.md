@@ -2,9 +2,11 @@
 
 **Pay smallholder farmers per kilo, at the scale, in seconds — with bank-grade records anyone can verify.**
 
-MicoPay Café is a payments platform for agricultural cooperatives built on **Stellar**. A cooperative weighs a delivery, the platform settles it (kilos × price − quality deductions − credit repayment), and one atomic Stellar transaction pays every producer **and** repays their crop loan at the same time. Every run produces ISO 20022 messages that validate against the official schemas, and the hash of the payment order is written into the transaction memo, so the bank record and the ledger point at each other.
+In Veracruz, during the harvest, *compradoras de café* (seasonal buying points) open in the coffee towns. Producers bring **café cereza** — the freshly picked fruit they cannot process themselves — and are paid per kilo, in cash, before the buyer carries it to the *beneficio*. MicoPay Café gives those buyers, and cooperatives, a way to pay on the spot without carrying cash.
 
-It is part of the [MicoPay](https://github.com/Micopay) ecosystem: producers receive the money in the MicoPay app and can keep it as digital pesos, send it to their bank via SPEI, or cash out with a MicoPay agent.
+MicoPay Café is a payments platform for coffee buyers and agricultural cooperatives built on **Stellar**. The buyer weighs a delivery, the platform settles it (kilos × price − quality deductions − credit repayment), and one atomic Stellar transaction pays every producer **and** repays their crop loan at the same time. Every run produces ISO 20022 messages that validate against the official schemas, and the hash of the payment order is written into the transaction memo, so the bank record and the ledger point at each other.
+
+It is part of the [MicoPay](https://github.com/Micopay) ecosystem: producers receive the money in the MicoPay app and can keep it as digital pesos, send it to their bank via SPEI, or cash out with a MicoPay agent — and the *compradora* itself can be that agent, so the producer can walk away with cash from the same counter.
 
 > Built for **Find Your Way: Hackathon** (Stellar Passport) · General Track.
 
@@ -13,7 +15,7 @@ It is part of the [MicoPay](https://github.com/Micopay) ecosystem: producers rec
 ## The problem
 
 - Coffee producers in southern Mexico sell through layers of intermediaries and are often paid late, in cash, with no record of how the price was computed.
-- Cooperatives carry cash to collection centers and reconcile payments by hand.
+- Buyers and cooperatives carry cash to collection points during the harvest and reconcile payments by hand.
 - Since the national rural development bank (FND) was dissolved in 2023, producers lost access to affordable crop credit. In 2026, FIRA and Amecafé proposed that **coffee cooperatives disburse credit themselves** — but they have no tool to disburse, collect and report it. ([research, in Spanish](docs/FINANCIAMIENTO.md))
 
 ## What it does
@@ -83,11 +85,11 @@ npm run dev:api            # http://127.0.0.1:8787
 npm run dev:web            # http://localhost:5180
 ```
 
-Then: **Realizar pago** → pick Juan Pérez (he has a disbursed loan) → weigh 250 kg with 13.5% humidity → **Ejecutar pago**. Open the transaction on stellar.expert and the ISO documents under **Historial**; follow the loan under **Créditos** (María's is pending: disburse it from there).
+Then: **Realizar pago** → pick Pedro Martínez → *Café cereza* is preselected at the demo price → weigh 600 kg → **Ejecutar pago**. Pick Juan Pérez (he has a disbursed loan) to see the repayment deducted in the same transaction. Open the transaction on stellar.expert and the ISO documents under **Historial**; follow the loan under **Créditos** (María's is pending: disburse it from there).
 
 ```bash
 npm test                   # ISO 20022 messages vs official XSDs + settlement math
-npx tsx apps/api/test/e2e.ts   # 26 end-to-end checks against testnet (API must be running, fresh seed)
+npx tsx apps/api/test/e2e.ts   # 28 end-to-end checks against testnet (API must be running, fresh seed)
 ```
 
 Testnet keys are written to `data/testnet-keys.json`, which is git-ignored. Testnet only — never real funds.
@@ -100,12 +102,13 @@ Next:
 1. Sign-in and signing with the MicoPay app (`/sign-requests`), replacing the local demo signer.
 2. Shared users with the MicoPay backend on AWS (identity = Stellar address).
 3. Operator roles and sign-in (the original app had operator/admin accounts), and lender reporting for FIRA credit dispersers.
-4. Monthly anchoring of the credit portfolio hash on Stellar.
-5. Optional quality escrow (Soroban), shared with MicoPay's rental platform.
+4. The next leg of the supply chain: *compradora* → *beneficio*, with the same delivery → settlement → payment model.
+5. Monthly anchoring of the credit portfolio hash on Stellar.
+6. Optional quality escrow (Soroban), shared with MicoPay's rental platform.
 
 ## Versión en español
 
-MicoPay Café es una plataforma para que las cooperativas paguen a sus productores por kilo entregado. Pagos y abonos a crédito salen en una sola transacción de Stellar, y cada corrida genera mensajes ISO 20022 validados contra los esquemas oficiales, con la huella del `pain.001` anclada en el memo de la transacción. El productor cobra en la app de MicoPay: en pesos digitales, por SPEI o en efectivo con un agente. Los documentos de diseño están en [`PLAN.md`](PLAN.md) y [`docs/`](docs/).
+MicoPay Café es una plataforma para que las compradoras de café y las cooperativas paguen a los productores por kilo entregado, empezando por el café cereza que se compra en temporada de cosecha. Pagos y abonos a crédito salen en una sola transacción de Stellar, y cada corrida genera mensajes ISO 20022 validados contra los esquemas oficiales, con la huella del `pain.001` anclada en el memo de la transacción. El productor cobra en la app de MicoPay: en pesos digitales, por SPEI o en efectivo con un agente. Los documentos de diseño están en [`PLAN.md`](PLAN.md) y [`docs/`](docs/).
 
 ## License
 

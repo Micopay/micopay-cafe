@@ -69,7 +69,7 @@ function Encabezado() {
   return (
     <div className="mb-7 flex flex-wrap items-center justify-between gap-3 border-b-2 border-tinta pb-4">
       <div>
-        <div className="text-[11px] font-bold uppercase tracking-[.14em] text-gris">Cooperativa</div>
+        <div className="text-[11px] font-bold uppercase tracking-[.14em] text-gris">Compradora de café</div>
         <div className="font-bold text-[16px]">{s.data?.cooperative.name ?? '…'}</div>
       </div>
       <div className="flex items-center gap-4">

@@ -17,10 +17,11 @@ import { addCafeCereza } from './products.js';
 import { horizon, LocalSigner, NETWORK_PASSPHRASE } from './stellar.js';
 import { friendbot } from './testnet.js';
 
+// Demo people and places: coffee towns around Xico, Veracruz.
 const PRODUCERS = [
-  { name: 'Juan Pérez López', community: 'Tenejapa, Chiapas', contact: '967 123 4501' },
-  { name: 'María Hernández Gómez', community: 'Oxchuc, Chiapas', contact: '967 123 4502' },
-  { name: 'Pedro Sántiz Girón', community: 'Chenalhó, Chiapas', contact: '967 123 4503' },
+  { name: 'Juan Pérez López', community: 'Xico, Veracruz', contact: '228 123 4501' },
+  { name: 'María Hernández Gómez', community: 'Teocelo, Veracruz', contact: '228 123 4502' },
+  { name: 'Pedro Martínez Landa', community: 'Cosautlán, Veracruz', contact: '228 123 4503' },
 ];
 
 async function main() {
@@ -54,9 +55,9 @@ async function main() {
 
   const db = await openDb(PG_DIR);
   await db.query(`INSERT INTO cooperatives (name, account_id, stellar_address) VALUES ($1, 'COOP-0001', $2)`,
-    ['Cooperativa Cafetalera Los Altos', coop.publicKey()]);
+    ['Compradora de Café La Cumbre', coop.publicKey()]);
   await db.query(`INSERT INTO lenders (name, kind, account_id, stellar_address) VALUES ($1, 'IFNB', 'LEND-0001', $2)`,
-    ['Fondo de Avío Los Altos (demo)', lender.publicKey()]);
+    ['Fondo de Avío Xico (demo)', lender.publicKey()]);
   for (const [i, p] of PRODUCERS.entries()) {
     await db.query(
       `INSERT INTO producers (cooperative_id, name, community, contact, account_id, stellar_address) VALUES (1, $1, $2, $3, $4, $5)`,
@@ -64,25 +65,26 @@ async function main() {
     );
   }
 
+  // Café cereza first: it is what producers sell the most during the harvest.
+  await addCafeCereza(db);
   await db.query(`INSERT INTO products (name, unit, quality_schema) VALUES
     ('Café pergamino', 'kg', '[{"key":"humedad","label":"Humedad","unit":"%"},{"key":"defectos","label":"Defectos","unit":"%"}]'),
     ('Cacao seco', 'kg', '[{"key":"humedad","label":"Humedad","unit":"%"},{"key":"fermentacion","label":"Fermentación","unit":"%"}]')`);
-  await addCafeCereza(db);
   // Demo prices, not market quotes.
   await db.query(`INSERT INTO prices (product_id, cooperative_id, price_per_unit, valid_from) VALUES
-    (1, 1, 82.00, NOW() - INTERVAL '2 days'), (1, 1, 85.00, NOW() - INTERVAL '1 hour'), (2, 1, 120.00, NOW() - INTERVAL '1 hour')`);
+    (2, 1, 82.00, NOW() - INTERVAL '2 days'), (2, 1, 85.00, NOW() - INTERVAL '1 hour'), (3, 1, 120.00, NOW() - INTERVAL '1 hour')`);
   await db.query(`INSERT INTO deduction_rules (product_id, attribute, above, percent, reason, label) VALUES
-    (1, 'humedad', 12, 4, 'HUME', 'Humedad arriba de 12%'),
-    (1, 'humedad', 14, 10, 'HUME', 'Humedad arriba de 14%'),
-    (1, 'defectos', 5, 3, 'DEFE', 'Defectos arriba de 5%'),
-    (2, 'humedad', 8, 5, 'HUME', 'Humedad arriba de 8%')`);
-  await audit(db, 'demo.inicializada', { cooperative: 'Cooperativa Cafetalera Los Altos' });
+    (2, 'humedad', 12, 4, 'HUME', 'Humedad arriba de 12%'),
+    (2, 'humedad', 14, 10, 'HUME', 'Humedad arriba de 14%'),
+    (2, 'defectos', 5, 3, 'DEFE', 'Defectos arriba de 5%'),
+    (3, 'humedad', 8, 5, 'HUME', 'Humedad arriba de 8%')`);
+  await audit(db, 'demo.inicializada', { buyer: 'Compradora de Café La Cumbre' });
 
   const due = new Date(); due.setMonth(due.getMonth() + 8);
   const dueDate = due.toISOString().slice(0, 10);
   const juan = await createCredit(db, {
-    producerId: 1, lenderId: 1, purpose: 'Avío: fertilizante y jornales', principal: '20000',
-    annualRate: '8.5', termMonths: 8, repaymentPercent: '25', dueDate,
+    producerId: 1, lenderId: 1, purpose: 'Avío: fertilizante y jornales', principal: '12000',
+    annualRate: '8.5', termMonths: 6, repaymentPercent: '25', dueDate,
   });
   const d = await disburseCredit(db, juan.id, { asset, signerFor: () => new LocalSigner(lender) });
   console.log(`Crédito ${juan.reference} desembolsado a Juan: ${d.txHash}`);
@@ -93,7 +95,7 @@ async function main() {
   console.log(`Crédito ${maria.reference} de María queda pendiente de desembolso`);
   await db.close();
 
-  console.log(`\nListo. Cooperativa: ${coop.publicKey()}\nDatos en ${DATA_DIR}`);
+  console.log(`\nListo. Compradora: ${coop.publicKey()}\nDatos en ${DATA_DIR}`);
 }
 
 main().catch((err) => {

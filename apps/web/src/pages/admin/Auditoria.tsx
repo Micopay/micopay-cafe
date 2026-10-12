@@ -32,7 +32,7 @@ export default function Auditoria() {
         <Panel sombra>
           <BarraPanel>Cierre de día (camt.053)</BarraPanel>
           <div className="p-5 grid gap-3 text-[14px]">
-            <p className="text-gris">Estado de cuenta ISO 20022 de la cuenta de la cooperativa en Stellar. Los saldos se reconstruyen desde la cadena, no se suponen.</p>
+            <p className="text-gris">Estado de cuenta ISO 20022 de la cuenta de la compradora en Stellar. Los saldos se reconstruyen desde la cadena, no se suponen.</p>
             <div className="flex gap-3 items-end">
               <div className="flex-1"><TextField etiqueta="Fecha" type="date" value={date} max={hoy()} onChange={(e) => setDate(e.target.value)} /></div>
               <a href={`/api/statement?date=${date}`} target="_blank" rel="noreferrer"><Button><Icon name="account_balance" /> Generar</Button></a>

@@ -21,14 +21,14 @@ export default function Prestamistas() {
   return (
     <>
       <Titulo cintillo="Administración" accion={!nuevo && <Button onClick={() => setNuevo(true)}><Icon name="add_circle" /> Nuevo prestamista</Button>}>Prestamistas</Titulo>
-      <p className="max-w-[760px] text-gris mb-6 text-[15px]">Quien pone el dinero del crédito: un IFNB, una SOFOM o un banco que fondea con FIRA, o la propia cooperativa como dispersora. Desembolsa desde su cuenta de Stellar y recibe los abonos ahí mismo.</p>
+      <p className="max-w-[760px] text-gris mb-6 text-[15px]">Quien pone el dinero del crédito: un IFNB, una SOFOM o un banco que fondea con FIRA, o la propia compradora o cooperativa como dispersora. Desembolsa desde su cuenta de Stellar y recibe los abonos ahí mismo.</p>
 
       {nuevo && (
         <Panel sombra className="mb-8">
           <BarraPanel>Nuevo prestamista</BarraPanel>
           <div className="p-5 grid gap-4 md:grid-cols-3">
             <TextField etiqueta="Nombre" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
-            <TextField etiqueta="Tipo" value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value })} ayuda="IFNB, SOFOM, banco, cooperativa…" />
+            <TextField etiqueta="Tipo" value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value })} ayuda="IFNB, SOFOM, banco, compradora, cooperativa…" />
             <TextField etiqueta="Dirección de Stellar" className="num text-[14px]" placeholder="G…" value={f.stellarAddress} onChange={(e) => setF({ ...f, stellarAddress: e.target.value })} />
             {error && <div className="md:col-span-3"><ErrorCaja mensaje={error} /></div>}
             <div className="md:col-span-3 flex gap-3">

@@ -41,7 +41,7 @@ export default function Recibo() {
         <ul className="mt-3 grid gap-2.5 text-[14px]">
           <li className="flex gap-2.5"><Icon name="account_balance_wallet" className="text-verde" /> Déjalo en tu app de MicoPay, en pesos digitales.</li>
           <li className="flex gap-2.5"><Icon name="account_balance" className="text-verde" /> Mándalo a tu banco por SPEI.</li>
-          <li className="flex gap-2.5"><Icon name="payments" className="text-naranja" /> Cámbialo a efectivo con un agente de la Red MicoPay.</li>
+          <li className="flex gap-2.5"><Icon name="payments" className="text-naranja" /> Cámbialo a efectivo con un agente de la Red MicoPay, o ahí mismo si tu compradora es agente.</li>
         </ul>
       </Card>
 

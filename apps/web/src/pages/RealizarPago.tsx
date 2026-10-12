@@ -16,7 +16,8 @@ export default function RealizarPago() {
 
   const producerId = params.get('productor') ? Number(params.get('productor')) : null;
   const producer = useData(() => (producerId ? api.producer(producerId) : Promise.resolve(null)), [producerId]);
-  const [productId, setProductId] = useState(1);
+  const [productId, setProductId] = useState<number | null>(null);
+  const [conCalidad, setConCalidad] = useState(false);
   const [quantity, setQuantity] = useState('');
   const [price, setPrice] = useState('');
   const [quality, setQuality] = useState<Record<string, string>>({});
@@ -28,6 +29,8 @@ export default function RealizarPago() {
   const [paying, setPaying] = useState(false);
   const [result, setResult] = useState<PaymentResult | null>(null);
 
+  // The first product is the one bought most (café cereza at a compradora): preselect it.
+  useEffect(() => { if (productId === null && products.data?.[0]) setProductId(products.data[0].id); }, [products.data, productId]);
   const product = products.data?.find((p) => p.id === productId);
   // The daily price is loaded as the default; the operator can override it (it gets audited).
   useEffect(() => { if (product?.price) setPrice(product.price); }, [product?.id, product?.price]);
@@ -36,8 +39,8 @@ export default function RealizarPago() {
     () => Object.fromEntries(Object.entries(quality).filter(([, v]) => v !== '' && !Number.isNaN(Number(v))).map(([k, v]) => [k, Number(v)])),
     [quality],
   );
-  const valid = producerId !== null && DEC.test(quantity) && Number(quantity) > 0 && DEC.test(price) && Number(price) > 0;
-  const input = valid ? { producerId: producerId!, productId, quantity, quality: qualityNumbers, unitPrice: price, lot: lot || undefined, notes: notes || undefined } : null;
+  const valid = producerId !== null && productId !== null && DEC.test(quantity) && Number(quantity) > 0 && DEC.test(price) && Number(price) > 0;
+  const input = valid ? { producerId: producerId!, productId: productId!, quantity, quality: qualityNumbers, unitPrice: price, lot: lot || undefined, notes: notes || undefined } : null;
 
   useEffect(() => {
     setConfirmando(false);
@@ -49,7 +52,7 @@ export default function RealizarPago() {
 
   function seleccionar(id: number) {
     setParams({ productor: String(id) });
-    setResult(null); setQuantity(''); setQuality({}); setLot(''); setNotes(''); setError(null);
+    setResult(null); setQuantity(''); setQuality({}); setConCalidad(false); setLot(''); setNotes(''); setError(null);
   }
 
   async function pagar() {
@@ -128,7 +131,7 @@ export default function RealizarPago() {
                     <Label>Producto</Label>
                     <div className="mt-3 flex flex-wrap gap-2">
                       {products.data?.map((x) => (
-                        <Pill key={x.id} activa={x.id === productId} onClick={() => { setProductId(x.id); setQuality({}); }}>{x.name}</Pill>
+                        <Pill key={x.id} activa={x.id === productId} onClick={() => { setProductId(x.id); setQuality({}); setConCalidad(false); }}>{x.name}</Pill>
                       ))}
                     </div>
                   </div>
@@ -138,8 +141,13 @@ export default function RealizarPago() {
                     <TextField etiqueta={`Precio por ${product?.unit ?? 'kg'} (MXN)`} inputMode="decimal" value={price} className="num"
                       onChange={(e) => setPrice(e.target.value.replace(',', '.'))}
                       ayuda={product?.price ? (precioModificado ? `Precio del día: ${mxn(product.price)}. El cambio queda en la bitácora.` : 'Precio oficial del día') : 'Sin precio del día configurado'} />
-                    {product?.quality_schema.map((f) => (
-                      <TextField key={f.key} etiqueta={`${f.label} (${f.unit}) · opcional`} inputMode="decimal" value={quality[f.key] ?? ''} className="num"
+                    {product && product.quality_schema.length > 0 && !conCalidad && (
+                      <button type="button" onClick={() => setConCalidad(true)} className="sm:col-span-2 text-left text-[14px] font-bold underline">
+                        + Agregar calidad (opcional): {product.quality_schema.map((f) => f.label.toLowerCase()).join(', ')}
+                      </button>
+                    )}
+                    {conCalidad && product?.quality_schema.map((f) => (
+                      <TextField key={f.key} etiqueta={`${f.label} (${f.unit})`} inputMode="decimal" value={quality[f.key] ?? ''} className="num"
                         onChange={(e) => setQuality({ ...quality, [f.key]: e.target.value.replace(',', '.') })}
                         ayuda={product.rules?.filter((r) => r.attribute === f.key).map((r) => `más de ${Number(r.above)}${f.unit}: −${Number(r.percent)}%`).join(' · ')} />
                     ))}
