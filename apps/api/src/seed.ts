@@ -1,7 +1,9 @@
 /**
  * Prepares a fresh demo on Stellar testnet:
- *  - funds issuer, cooperative, lender and producers with friendbot
- *  - issues the demo MXNe token: working capital to the cooperative, a loan fund to the lender
+ *  - funds the buyer, lender and producers with friendbot
+ *  - settles in MicoPay's testnet USDC (issuer GADK7…, the one the MicoPay app shows):
+ *    working capital to the buyer and a loan fund to the lender, minted with the
+ *    issuer key of the MicoPay USDC rehearsal (~/.micopay/ensayo-usdc.json)
  *  - loads cooperative, lender, producers, products, daily prices and quality rules
  *  - grants and disburses one crop loan through the real flow (terms anchored on Stellar)
  *    and leaves a second one pending so the admin flow can be shown
@@ -9,8 +11,10 @@
  * Testnet only. Keys are written to data/testnet-keys.json (git-ignored).
  */
 import { Asset, Keypair, Operation, TransactionBuilder } from '@stellar/stellar-sdk';
-import { rmSync } from 'node:fs';
-import { ASSET_CODE, DATA_DIR, PG_DIR, saveKeys, type TestnetKeys } from './config.js';
+import { readFileSync, rmSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+import { DATA_DIR, PG_DIR, saveKeys, type TestnetKeys } from './config.js';
 import { createCredit, disburseCredit } from './credits.js';
 import { audit, openDb } from './db.js';
 import { addCafeCereza } from './products.js';
@@ -22,31 +26,40 @@ const PRODUCERS = [
   { name: 'Juan Pérez López', community: 'Xico, Veracruz', contact: '228 123 4501' },
   { name: 'María Hernández Gómez', community: 'Teocelo, Veracruz', contact: '228 123 4502' },
   { name: 'Pedro Martínez Landa', community: 'Cosautlán, Veracruz', contact: '228 123 4503' },
+  { name: 'Juana Sandoval', community: 'Huatusco, Veracruz', contact: '273 123 4504' },
 ];
+
+/** Testnet USDC issuer of the MicoPay rehearsal: the app's VITE_USDC_ISSUER on testnet. */
+function usdcIssuer(): Keypair {
+  const state = JSON.parse(readFileSync(join(homedir(), '.micopay', 'ensayo-usdc.json'), 'utf8')) as { issuer: string };
+  return Keypair.fromSecret(state.issuer);
+}
 
 async function main() {
   rmSync(PG_DIR, { recursive: true, force: true });
 
-  const issuer = Keypair.random();
+  const issuer = usdcIssuer();
   const coop = Keypair.random();
   const lender = Keypair.random();
   const producers = PRODUCERS.map(() => Keypair.random());
 
-  console.log('Fondeando 6 cuentas con friendbot…');
-  await Promise.all([issuer, coop, lender, ...producers].map((k) => friendbot(k.publicKey())));
+  console.log(`Fondeando ${2 + producers.length} cuentas con friendbot…`);
+  await Promise.all([coop, lender, ...producers].map((k) => friendbot(k.publicKey())));
 
-  const asset = new Asset(ASSET_CODE, issuer.publicKey());
+  const asset = new Asset('USDC', issuer.publicKey());
   const holders = [coop, lender, ...producers];
   const builder = new TransactionBuilder(await horizon.loadAccount(coop.publicKey()), { fee: '1000', networkPassphrase: NETWORK_PASSPHRASE }).setTimeout(120);
   for (const h of holders) builder.addOperation(Operation.changeTrust({ asset, source: h.publicKey() }));
-  builder.addOperation(Operation.payment({ source: issuer.publicKey(), destination: coop.publicKey(), asset, amount: '500000' }));
-  builder.addOperation(Operation.payment({ source: issuer.publicKey(), destination: lender.publicKey(), asset, amount: '300000' }));
+  builder.addOperation(Operation.payment({ source: issuer.publicKey(), destination: coop.publicKey(), asset, amount: '30000' }));
+  builder.addOperation(Operation.payment({ source: issuer.publicKey(), destination: lender.publicKey(), asset, amount: '15000' }));
   const tx = builder.build();
   tx.sign(issuer, ...holders);
-  console.log(`Trustlines y fondeo en MXNe: ${(await horizon.submitTransaction(tx)).hash}`);
+  console.log(`Trustlines y fondeo en USDC de testnet: ${(await horizon.submitTransaction(tx)).hash}`);
 
+  // The issuer secret stays in ~/.micopay; the demo key file only records the asset.
   const keys: TestnetKeys = {
-    issuer: issuer.secret(),
+    issuer: '',
+    asset: { code: 'USDC', issuer: issuer.publicKey() },
     cooperative: coop.secret(),
     lender: lender.secret(),
     producers: Object.fromEntries(producers.map((k, i) => [`PROD-000${i + 1}`, k.secret()])),

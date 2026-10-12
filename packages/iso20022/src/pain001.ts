@@ -36,6 +36,13 @@ export interface ReferredDocument {
   remitted: string;
 }
 
+export interface ExchangeRate {
+  /** Currency of 1 unit, e.g. USD for USDC. */
+  unitCcy: string;
+  /** MXN per 1 unit. */
+  rate: string;
+}
+
 export interface CreditTransfer {
   instrId: string;
   endToEndId: string;
@@ -43,6 +50,9 @@ export interface CreditTransfer {
   amount: string;
   creditor: Party;
   document: ReferredDocument;
+  /** Present when the MXN amount settles in a token of another currency (USDC). */
+  exchangeRate?: ExchangeRate;
+  settlement?: SettlementInfo;
 }
 
 export interface PaymentRun {
@@ -115,13 +125,16 @@ export function buildPain001(run: PaymentRun): string {
         el('UETR', t.uetr),
       ]),
       el('Amt', [el('InstdAmt', t.amount, { Ccy: ccy })]),
+      t.exchangeRate
+        ? el('XchgRateInf', [el('UnitCcy', currency(t.exchangeRate.unitCcy)), el('XchgRate', t.exchangeRate.rate), el('RateTp', 'SPOT')])
+        : null,
       stellarAgentNode('CdtrAgt'),
       partyNode('Cdtr', t.creditor.name),
       accountNode('CdtrAcct', t.creditor.account),
       el('Purp', [el('Cd', 'GDDS')]),
       remittance(t.document, ccy),
-      settlementNode(run.settlement),
-    ]),
+      settlementNode(t.settlement ?? run.settlement),
+    ].filter((n): n is Node => n !== null)),
   );
 
   return documentXml(

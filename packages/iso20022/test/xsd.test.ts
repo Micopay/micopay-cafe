@@ -178,3 +178,27 @@ describe('estado de cuenta con movimientos ajenos a una corrida', () => {
     );
   });
 });
+
+describe('liquidación en USDC con tipo de cambio', () => {
+  it('pain.001 en MXN con XchgRateInf y el monto en USDC en el sobre de Stellar', async () => {
+    const r = run();
+    r.transactions[0]!.exchangeRate = { unitCcy: 'USD', rate: '18.406744' };
+    r.transactions[0]!.settlement = { network: 'TESTNET', assetCode: 'USDC', assetIssuer: SETTLEMENT.assetIssuer, tokenAmount: '836.64627', fxRate: '18.406744' };
+    const xml = buildPain001(r);
+    expect(xml).toContain('<XchgRate>18.406744</XchgRate>');
+    expect(xml).toContain('<Amount>836.64627</Amount>');
+    await expectValid(xml, 'pain.001.001.09');
+  });
+
+  it('camt.053 de una cuenta en USD con 5 decimales que concilia', async () => {
+    const e = (d: 'CRDT' | 'DBIT', v: string): Entry => ({ amount: v, direction: d, bookedAt: NOW, settlement: { ...SETTLEMENT, assetCode: 'USDC' } });
+    await expectValid(
+      buildCamt053({
+        msgId: 'STM-USD', statementId: 'S-USD', createdAt: NOW, from: NOW, to: NOW, account: COOP.account, accountOwner: COOP.name,
+        currency: 'USD', decimals: 5, openingBalance: '30000.00000', closingBalance: '29068.17396',
+        entries: [e('DBIT', '836.64627'), e('DBIT', '95.17977')],
+      }),
+      'camt.053.001.08',
+    );
+  });
+});

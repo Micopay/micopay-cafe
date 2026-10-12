@@ -5,6 +5,9 @@ const QTY = new Intl.NumberFormat(locale, { minimumFractionDigits: 0, maximumFra
 
 /** Money arrives as decimal strings from the API; formatting is display-only. */
 export const mxn = (v: string | number | null | undefined) => MXN.format(Number(v ?? 0));
+/** Token amounts (USDC): up to 2 decimals shown, the ledger keeps 5. */
+export const token = (v: string | number | null | undefined) =>
+  new Intl.NumberFormat(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(v ?? 0));
 export const qty = (v: string | number | null | undefined) => QTY.format(Number(v ?? 0));
 export const short = (s: string, n = 6) => (s.length > n * 2 ? `${s.slice(0, n)}…${s.slice(-n)}` : s);
 export const fecha = (v: string | Date) =>

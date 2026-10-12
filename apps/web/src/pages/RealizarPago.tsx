@@ -3,7 +3,7 @@ import { t } from '../i18n';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api, type PaymentResult, type Preview } from '../api';
 import { BarraPanel, ErrorCaja, Panel, Titulo } from '../comun';
-import { mxn, qty, short } from '../format';
+import { mxn, qty, short, token } from '../format';
 import { Button, Icon, Label, Pill, TextField } from '../ui';
 import { useData } from '../useData';
 
@@ -214,6 +214,7 @@ function PagoExitoso({ r }: { r: PaymentResult }) {
         <div>
           <div className="text-[11px] font-bold uppercase tracking-[.12em] text-verde-brillo flex items-center gap-1.5"><Icon name="verified" filled size={18} /> {t('Pago exitoso en Stellar')}</div>
           <div className="mt-2 num font-display text-[30px] font-extrabold text-verde-brillo leading-none">{mxn(r.net)}</div>
+          <div className="mt-1 text-[14px] text-papel num">{r.tokenAmount && t('Liquidado en Stellar: {amount} {asset}', { amount: token(r.tokenAmount), asset: r.asset })}</div>
           <div className="mt-2 text-[13px] text-gris-3 num">{t('Entrega {ref}', { ref: r.reference })}{Number(r.creditRepayment) > 0 && t(' · abono al crédito {amount} en la misma transacción', { amount: mxn(r.creditRepayment) })}</div>
         </div>
         <div className="flex flex-wrap gap-3">

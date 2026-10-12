@@ -47,6 +47,7 @@ const EN: Record<string, string> = {
   'Auditoría': 'Audit',
   'Compradora de café': 'Coffee buyer',
   'Saldo · {code} · testnet': 'Balance · {code} · testnet',
+  'Saldo en pesos · testnet': 'Balance in pesos · testnet',
   'Actualizar saldo': 'Refresh balance',
   'Cuenta {addr} · firma {signer}': 'Account {addr} · signed {signer}',
   'desde la app de MicoPay': 'from the MicoPay app',
@@ -122,6 +123,9 @@ const EN: Record<string, string> = {
   'Ver en Stellar': 'View on Stellar',
   'Detalle e ISO 20022': 'Details & ISO 20022',
   'Recibo': 'Receipt',
+  'Liquidado en Stellar: {amount} {asset}': 'Settled on Stellar: {amount} {asset}',
+  'Liquidado en Stellar': 'Settled on Stellar',
+  'Tipo de cambio': 'Exchange rate',
 
   // producers
   'Socios': 'Members',

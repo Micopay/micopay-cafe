@@ -24,11 +24,11 @@ export interface Entry {
   settlement: SettlementInfo;
 }
 
-function entryNode(e: Entry, ccy: string): Node {
+function entryNode(e: Entry, ccy: string, decimals = 2): Node {
   // PMNT / RCDT|ICDT / DMCT: received or issued domestic credit transfer.
   const family = e.direction === 'CRDT' ? 'RCDT' : 'ICDT';
   return el('Ntry', [
-    el('Amt', amount(e.amount), { Ccy: ccy }),
+    el('Amt', amount(e.amount, 'amount', decimals), { Ccy: ccy }),
     el('CdtDbtInd', e.direction),
     el('Sts', [el('Cd', 'BOOK')]),
     el('BookgDt', [el('DtTm', isoDateTime(e.bookedAt))]),
@@ -45,7 +45,7 @@ function entryNode(e: Entry, ccy: string): Node {
               e.uetr ? el('UETR', e.uetr) : null,
             ))
           : null,
-        el('Amt', amount(e.amount), { Ccy: ccy }),
+        el('Amt', amount(e.amount, 'amount', decimals), { Ccy: ccy }),
         el('CdtDbtInd', e.direction),
         e.debtor || e.creditor
           ? el('RltdPties', opt(
@@ -109,22 +109,25 @@ export interface Statement {
   openingBalance: string;
   closingBalance: string;
   entries: Entry[];
+  /** 2 for MXN; up to 5 for a token account statement (USD). */
+  decimals?: number;
 }
 
-function balanceNode(code: 'OPBD' | 'CLBD', value: string, ccy: string, date: Date): Node {
+function balanceNode(code: 'OPBD' | 'CLBD', value: string, ccy: string, date: Date, decimals: number): Node {
   const negative = value.startsWith('-');
   return el('Bal', [
     el('Tp', [el('CdOrPrtry', [el('Cd', code)])]),
-    el('Amt', amount(negative ? value.slice(1) : value), { Ccy: ccy }),
+    el('Amt', amount(negative ? value.slice(1) : value, 'balance', decimals), { Ccy: ccy }),
     el('CdtDbtInd', negative ? 'DBIT' : 'CRDT'),
     el('Dt', [el('Dt', isoDate(date))]),
   ]);
 }
 
-function toCents(v: string): bigint {
+/** Exact integer in units of 10^-5, enough for MXN cents and token amounts. */
+function toUnits(v: string): bigint {
   const neg = v.startsWith('-');
   const [i, f = ''] = (neg ? v.slice(1) : v).split('.');
-  const c = BigInt(i!) * 100n + BigInt((f + '00').slice(0, 2));
+  const c = BigInt(i!) * 100000n + BigInt((f + '00000').slice(0, 5));
   return neg ? -c : c;
 }
 
@@ -134,8 +137,9 @@ function toCents(v: string): bigint {
  */
 export function buildCamt053(s: Statement): string {
   const ccy = currency(s.currency);
-  const movement = s.entries.reduce((acc, e) => acc + (e.direction === 'CRDT' ? 1n : -1n) * toCents(amount(e.amount)), 0n);
-  if (toCents(s.openingBalance) + movement !== toCents(s.closingBalance)) {
+  const dec = s.decimals ?? 2;
+  const movement = s.entries.reduce((acc, e) => acc + (e.direction === 'CRDT' ? 1n : -1n) * toUnits(amount(e.amount, 'amount', dec)), 0n);
+  if (toUnits(s.openingBalance) + movement !== toUnits(s.closingBalance)) {
     throw new Error(`statement does not reconcile: ${s.openingBalance} + movements ≠ ${s.closingBalance}`);
   }
   return documentXml(
@@ -147,9 +151,9 @@ export function buildCamt053(s: Statement): string {
         el('CreDtTm', isoDateTime(s.createdAt)),
         el('FrToDt', [el('FrDtTm', isoDateTime(s.from)), el('ToDtTm', isoDateTime(s.to))]),
         accountWithOwner(s.account, s.accountOwner, ccy),
-        balanceNode('OPBD', s.openingBalance, ccy, s.from),
-        balanceNode('CLBD', s.closingBalance, ccy, s.to),
-        ...s.entries.map((e) => entryNode(e, ccy)),
+        balanceNode('OPBD', s.openingBalance, ccy, s.from, dec),
+        balanceNode('CLBD', s.closingBalance, ccy, s.to, dec),
+        ...s.entries.map((e) => entryNode(e, ccy, dec)),
       ]),
     ]),
   );

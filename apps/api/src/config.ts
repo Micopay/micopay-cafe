@@ -15,6 +15,8 @@ export interface TestnetKeys {
   extraLenders?: string[];
   /** Producer secrets keyed by account id or address (demo only; the platform never uses them). */
   producers: Record<string, string>;
+  /** Settlement token. The demo uses MicoPay's testnet USDC so the MicoPay app shows it. */
+  asset?: { code: string; issuer: string };
 }
 
 export function loadKeys(): TestnetKeys {
@@ -27,9 +29,10 @@ export function saveKeys(keys: TestnetKeys): void {
   writeFileSync(KEYS_FILE, JSON.stringify(keys, null, 2));
 }
 
-/** Demo stand-in for MXNe: a peso-pegged token issued by our own testnet issuer. */
-export const ASSET_CODE = 'MXNe';
-
 export function settlementAsset(keys: TestnetKeys): Asset {
-  return new Asset(ASSET_CODE, Keypair.fromSecret(keys.issuer).publicKey());
+  if (!keys.asset) throw new Error('testnet-keys.json no tiene el activo de liquidación; corre de nuevo el seed');
+  return new Asset(keys.asset.code, keys.asset.issuer);
 }
+
+/** ISO 4217 currency the settlement token is worth (USDC → USD). */
+export const TOKEN_CCY: Record<string, string> = { USDC: 'USD' };

@@ -6,6 +6,7 @@ import Big from 'big.js';
 import { createHash, randomUUID } from 'node:crypto';
 import type { Asset } from '@stellar/stellar-sdk';
 import { audit, type Db } from './db.js';
+import { toToken, usdcMxnRate } from './fx.js';
 import { buildPaymentTransaction, submit, type Signer } from './stellar.js';
 
 interface SettlementRow {
@@ -73,15 +74,20 @@ export async function executeRun(db: Db, deps: {
   if (rows.length !== deps.settlementIds.length) throw new Error('alguna liquidación no existe o ya fue pagada');
 
   const now = new Date();
+  // One rate for the whole run: MXN amounts are what was agreed, USDC is what moves.
+  const { rate } = await usdcMxnRate();
+  const unitCcy = deps.asset.getCode() === 'USDC' ? 'USD' : null;
   const debtor: Party = { name: coop.name, account: { id: coop.account_id, stellarAddress: coop.stellar_address } };
   const baseSettlement: SettlementInfo = { network: deps.network, assetCode: deps.asset.getCode(), assetIssuer: deps.asset.getIssuer() };
 
-  const transfers: Array<CreditTransfer & { settlementId: number }> = rows.map((r) => ({
+  const transfers: Array<CreditTransfer & { settlementId: number; tokenAmount: string }> = rows.map((r) => ({
     settlementId: r.id,
     instrId: shortRef('INS', now),
     endToEndId: shortRef('E2E', now),
     uetr: randomUUID(),
     amount: r.net,
+    tokenAmount: toToken(r.net, rate),
+    ...(unitCcy ? { exchangeRate: { unitCcy, rate } } : {}),
     creditor: { name: r.producer_name, account: { id: r.producer_account, stellarAddress: r.producer_address } },
     document: {
       number: r.delivery_ref,
@@ -100,7 +106,7 @@ export async function executeRun(db: Db, deps: {
       ],
       remitted: r.net,
     },
-  }));
+  })).map((t) => ({ ...t, settlement: { ...baseSettlement, tokenAmount: t.tokenAmount, fxRate: rate } }));
 
   const msgId = shortRef('PAIN', now);
   const pmtInfId = shortRef('RUN', now);
@@ -111,13 +117,13 @@ export async function executeRun(db: Db, deps: {
   const pain001Sha256 = createHash('sha256').update(pain001).digest('hex');
 
   const run = (await db.query<{ id: number }>(
-    `INSERT INTO payment_runs (cooperative_id, msg_id, pmt_inf_id, status, pain001, pain001_sha256, created_at)
-     VALUES ($1, $2, $3, 'signing', $4, $5, $6) RETURNING id`,
-    [coop.id, msgId, pmtInfId, pain001, pain001Sha256, now],
+    `INSERT INTO payment_runs (cooperative_id, msg_id, pmt_inf_id, status, pain001, pain001_sha256, fx_rate, created_at)
+     VALUES ($1, $2, $3, 'signing', $4, $5, $6, $7) RETURNING id`,
+    [coop.id, msgId, pmtInfId, pain001, pain001Sha256, rate, now],
   )).rows[0]!;
   for (const t of transfers) {
-    await db.query(`UPDATE settlements SET run_id = $1, instr_id = $2, end_to_end_id = $3, uetr = $4, status = 'in_run' WHERE id = $5`,
-      [run.id, t.instrId, t.endToEndId, t.uetr, t.settlementId]);
+    await db.query(`UPDATE settlements SET run_id = $1, instr_id = $2, end_to_end_id = $3, uetr = $4, token_amount = $5, status = 'in_run' WHERE id = $6`,
+      [run.id, t.instrId, t.endToEndId, t.uetr, t.tokenAmount, t.settlementId]);
   }
 
   // Producer payments, then repayments aggregated per lender.
@@ -132,13 +138,13 @@ export async function executeRun(db: Db, deps: {
     asset: deps.asset,
     memoSha256: pain001Sha256,
     payments: [
-      ...rows.filter((r) => new Big(r.net).gt(0)).map((r) => ({ destination: r.producer_address, amount: r.net })),
-      ...[...repayByLender].map(([destination, amount]) => ({ destination, amount: amount.toFixed(2) })),
+      ...transfers.filter((t) => new Big(t.tokenAmount).gt(0)).map((t) => ({ destination: t.creditor.account.stellarAddress, amount: t.tokenAmount })),
+      ...[...repayByLender].map(([destination, amount]) => ({ destination, amount: toToken(amount.toFixed(2), rate) })),
     ],
   });
   const result = await submit(await deps.signer.sign(tx));
   const status = statusFromStellar(result);
-  const settledInfo: SettlementInfo = { ...baseSettlement, txHash: result.hash };
+  const settledInfo: SettlementInfo = { ...baseSettlement, txHash: result.hash, fxRate: rate };
 
   const pain002 = buildPain002({
     msgId: shortRef('STS', now), createdAt: new Date(), initiatingParty: coop.name,
@@ -146,7 +152,7 @@ export async function executeRun(db: Db, deps: {
     entries: transfers.map((t) => ({
       originalInstrId: t.instrId, originalEndToEndId: t.endToEndId, originalUetr: t.uetr,
       status, reasonCode: result.code, reasonInfo: result.successful ? undefined : 'Stellar rechazó la transacción; no se movió dinero',
-      settlement: settledInfo,
+      settlement: { ...settledInfo, tokenAmount: t.tokenAmount },
     })),
   });
 
@@ -166,7 +172,7 @@ export async function executeRun(db: Db, deps: {
       account: t.creditor.account, accountOwner: t.creditor.name, currency: 'MXN',
       entries: [{
         amount: t.amount, direction: 'CRDT', bookedAt, instrId: t.instrId, endToEndId: t.endToEndId, uetr: t.uetr,
-        debtor, creditor: t.creditor, settlement: settledInfo,
+        debtor, creditor: t.creditor, settlement: { ...settledInfo, tokenAmount: t.tokenAmount },
         remittance: `Liquidación ${r.delivery_ref} · ${new Big(r.quantity).toFixed(2)} ${r.unit} ${r.product}`,
       }],
     });
@@ -179,8 +185,9 @@ export async function executeRun(db: Db, deps: {
         [r.credit_repayment, r.credit_id],
       )).rows[0]!;
       await db.query(
-        `INSERT INTO credit_movements (credit_id, kind, amount, balance_after, settlement_id, tx_hash) VALUES ($1, 'abono', $2, $3, $4, $5)`,
-        [r.credit_id, r.credit_repayment, balance.outstanding, t.settlementId, result.hash],
+        `INSERT INTO credit_movements (credit_id, kind, amount, balance_after, settlement_id, tx_hash, token_amount, fx_rate)
+         VALUES ($1, 'abono', $2, $3, $4, $5, $6, $7)`,
+        [r.credit_id, r.credit_repayment, balance.outstanding, t.settlementId, result.hash, toToken(r.credit_repayment, rate), rate],
       );
     }
   }

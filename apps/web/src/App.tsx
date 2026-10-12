@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { NavLink, Route, Routes, useLocation } from 'react-router-dom';
 import { api } from './api';
 import { lang, setLang, t } from './i18n';
-import { mxn, short } from './format';
+import { mxn, short, token } from './format';
 import { Icon } from './ui';
 import { useData } from './useData';
 import RealizarPago from './pages/RealizarPago';
@@ -75,8 +75,11 @@ function Encabezado() {
       </div>
       <div className="flex items-center gap-4">
         <div className="text-right">
-          <div className="text-[11px] font-bold uppercase tracking-[.14em] text-gris">{t('Saldo · {code} · testnet', { code: s.data?.asset.code ?? '' })}</div>
-          <div className="num font-display text-[22px] font-extrabold text-verde leading-tight">{s.data?.balance ? mxn(s.data.balance) : '—'}</div>
+          <div className="text-[11px] font-bold uppercase tracking-[.14em] text-gris">{t('Saldo en pesos · testnet')}</div>
+          <div className="num font-display text-[22px] font-extrabold text-verde leading-tight">{s.data?.balanceMxn ? mxn(s.data.balanceMxn) : '—'}</div>
+          {s.data?.balance && s.data.fx && (
+            <div className="num text-[12px] text-gris">{token(s.data.balance)} {s.data.asset.code} · 1 USD = {Number(s.data.fx.rate).toFixed(2)} MXN</div>
+          )}
         </div>
         <button type="button" onClick={s.reload} aria-label={t('Actualizar saldo')} className="rounded-sm border-2 border-tinta bg-papel p-2"><Icon name="history_toggle_off" /></button>
       </div>

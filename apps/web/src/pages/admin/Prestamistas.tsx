@@ -49,7 +49,7 @@ export default function Prestamistas() {
                 <td className={td}><b>{t(l.name)}</b></td>
                 <td className={td}>{l.kind}</td>
                 <td className={`${td} num text-[13px]`}>{l.account_id}<div className="text-gris">{short(l.stellar_address)}</div></td>
-                <td className={`${tdNum} text-verde`}>{l.balance ? mxn(l.balance) : '—'}</td>
+                <td className={`${tdNum} text-verde`}>{l.balanceMxn ? mxn(l.balanceMxn) : '—'}</td>
                 <td className={tdNum}>{l.active_credits}</td>
                 <td className={`${tdNum} font-bold`}>{mxn(l.portfolio)}</td>
                 <td className={td}>{l.canSign ? <Badge tono="verde">{t('Demo local')}</Badge> : <Badge tono="aviso">{t('App de MicoPay')}</Badge>}</td>

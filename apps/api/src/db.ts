@@ -114,6 +114,8 @@ CREATE TABLE IF NOT EXISTS payment_runs (
   pain002        TEXT,
   tx_hash        CHAR(64),
   result_code    TEXT,
+  -- MXN per 1 unit of the settlement token (USDC) used for the whole run.
+  fx_rate        NUMERIC(14,6),
   created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   settled_at     TIMESTAMPTZ
 );
@@ -133,6 +135,8 @@ CREATE TABLE IF NOT EXISTS settlements (
   instr_id         VARCHAR(35),
   end_to_end_id    VARCHAR(35),
   uetr             UUID,
+  -- What actually moved on Stellar: the MXN net converted at the run's rate.
+  token_amount     NUMERIC(20,5),
   camt054          TEXT
 );
 
@@ -142,6 +146,8 @@ CREATE TABLE IF NOT EXISTS credit_movements (
   kind          VARCHAR(12) NOT NULL,            -- desembolso | abono
   amount        NUMERIC(14,2) NOT NULL,
   balance_after NUMERIC(14,2) NOT NULL,
+  token_amount  NUMERIC(20,5),
+  fx_rate       NUMERIC(14,6),
   settlement_id INT REFERENCES settlements(id),
   tx_hash       CHAR(64),
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()

@@ -36,7 +36,7 @@ async function movesSince(address: string, asset: Asset, since: Date): Promise<L
  * Balances come from the ledger: closing(to) = current − movements after `to`,
  * opening(from) = closing(to) − movements inside the period. Nothing is assumed.
  */
-export async function buildStatement(db: Db, params: { from: Date; to: Date; asset: Asset; network: SettlementInfo['network'] }): Promise<string> {
+export async function buildStatement(db: Db, params: { from: Date; to: Date; asset: Asset; network: SettlementInfo['network']; currency: string }): Promise<string> {
   const coop = (await db.query<{ name: string; account_id: string; stellar_address: string }>(
     `SELECT name, account_id, stellar_address FROM cooperatives WHERE id = 1`,
   )).rows[0]!;
@@ -63,7 +63,7 @@ export async function buildStatement(db: Db, params: { from: Date; to: Date; ass
   const entries: Entry[] = inside.map((m) => {
     const k = known.get(`${m.hash}:${m.counterparty}`);
     return {
-      amount: m.amount.toFixed(2),
+      amount: m.amount.toFixed(5),
       direction: m.direction,
       bookedAt: m.at,
       ...(k ? {
@@ -78,7 +78,8 @@ export async function buildStatement(db: Db, params: { from: Date; to: Date; ass
   const now = new Date();
   return buildCamt053({
     msgId: shortRef('STM', now), statementId: shortRef('S', now), createdAt: now, from: params.from, to: params.to,
-    account: coopParty.account, accountOwner: coop.name, currency: 'MXN',
-    openingBalance: opening.toFixed(2), closingBalance: closing.toFixed(2), entries,
+    // The account holds the token, so the statement is in its currency (USDC → USD).
+    account: coopParty.account, accountOwner: coop.name, currency: params.currency, decimals: 5,
+    openingBalance: opening.toFixed(5), closingBalance: closing.toFixed(5), entries,
   });
 }

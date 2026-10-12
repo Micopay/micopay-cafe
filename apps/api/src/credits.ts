@@ -2,6 +2,7 @@ import Big from 'big.js';
 import { createHash } from 'node:crypto';
 import type { Asset } from '@stellar/stellar-sdk';
 import { audit, type Db } from './db.js';
+import { toToken, usdcMxnRate } from './fx.js';
 import { buildPaymentTransaction, submit, type Signer } from './stellar.js';
 
 /* ── Pure terms math ───────────────────────────────────────────────────── */
@@ -92,18 +93,21 @@ export async function disburseCredit(db: Db, id: number, deps: { asset: Asset; s
   const signer = deps.signerFor(c.lender_address);
   if (!signer) throw new Error('este prestamista no tiene firmante configurado en la demo; firmaría desde su app de MicoPay');
 
+  // The loan is in MXN; the lender sends its USDC equivalent at today's rate.
+  const { rate } = await usdcMxnRate();
+  const tokenAmount = toToken(c.principal, rate);
   const tx = await buildPaymentTransaction({
     source: c.lender_address, asset: deps.asset, memoSha256: c.terms_sha256,
-    payments: [{ destination: c.producer_address, amount: c.principal }],
+    payments: [{ destination: c.producer_address, amount: tokenAmount }],
   });
   const result = await submit(await signer.sign(tx));
   if (!result.successful) throw new Error(`Stellar rechazó el desembolso (${result.code})`);
 
   await db.query(`UPDATE credits SET status = 'vigente', disbursement_tx = $1, disbursed_at = NOW() WHERE id = $2`, [result.hash, id]);
-  await db.query(`INSERT INTO credit_movements (credit_id, kind, amount, balance_after, tx_hash) VALUES ($1, 'desembolso', $2, $3, $4)`,
-    [id, c.principal, c.total_due, result.hash]);
+  await db.query(`INSERT INTO credit_movements (credit_id, kind, amount, balance_after, tx_hash, token_amount, fx_rate) VALUES ($1, 'desembolso', $2, $3, $4, $5, $6)`,
+    [id, c.principal, c.total_due, result.hash, tokenAmount, rate]);
   await audit(db, 'credito.desembolso', { reference: c.reference, amount: c.principal, tx: result.hash });
-  return { txHash: result.hash };
+  return { txHash: result.hash, tokenAmount, rate };
 }
 
 export async function cancelCredit(db: Db, id: number): Promise<void> {

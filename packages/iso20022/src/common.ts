@@ -30,11 +30,13 @@ export function isoDate(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-const AMOUNT_RE = /^\d{1,13}(\.\d{1,2})?$/;
-
-/** Amounts travel as decimal strings: never floats. MXN has 2 minor units. */
-export function amount(value: string, field = 'amount'): string {
-  if (!AMOUNT_RE.test(value)) throw new Error(`${field} must be a decimal string with up to 2 decimals, got "${value}"`);
+/**
+ * Amounts travel as decimal strings: never floats. MXN has 2 minor units; token
+ * (USD) amounts use up to 5, the maximum an ISO 20022 amount carries.
+ */
+export function amount(value: string, field = 'amount', decimals = 2): string {
+  const re = new RegExp(`^\\d{1,13}(\\.\\d{1,${decimals}})?$`);
+  if (!re.test(value)) throw new Error(`${field} must be a decimal string with up to ${decimals} decimals, got "${value}"`);
   return value;
 }
 
@@ -83,6 +85,9 @@ export interface SettlementInfo {
   txHash?: string;
   /** ISO 24165 Digital Token Identifier, when known. */
   dti?: string;
+  /** Token units that actually moved on the ledger, and the MXN-per-token rate used. */
+  tokenAmount?: string;
+  fxRate?: string;
 }
 
 /** SplmtryData/Envlp admits exactly one child element, so everything goes in one wrapper. */
@@ -96,6 +101,8 @@ export function settlementNode(s: SettlementInfo): Node {
           el('Network', s.network),
           el('Asset', null, { code: s.assetCode, ...(s.assetIssuer ? { issuer: s.assetIssuer } : {}) }),
           s.dti ? el('DTI', s.dti) : null,
+          s.tokenAmount ? el('Amount', s.tokenAmount) : null,
+          s.fxRate ? el('FxRate', s.fxRate, { unit: `MXN/${s.assetCode}` }) : null,
           s.txHash ? el('TxHash', s.txHash) : null,
         ),
         { xmlns: SETTLEMENT_NS },

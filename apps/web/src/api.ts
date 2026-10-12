@@ -1,6 +1,8 @@
 export interface Summary {
   cooperative: { name: string; stellar_address: string };
   balance: string | null;
+  balanceMxn: string | null;
+  fx: { rate: string; source: string } | null;
   asset: { code: string; issuer: string };
   network: string;
   signer: 'local' | 'micopay';
@@ -28,13 +30,17 @@ export interface Preview {
   credit: { reference: string; outstanding: string; repaymentPercent: string } | null;
 }
 export interface PaymentInput { producerId: number; productId: number; quantity: string; quality: Record<string, number>; unitPrice?: string; lot?: string; notes?: string }
-export interface PaymentResult extends Preview { runId: number; status: 'settled' | 'rejected'; txHash: string; resultCode?: string; explorer: string; settlementId: number; reference: string }
+export interface PaymentResult extends Preview {
+  runId: number; status: 'settled' | 'rejected'; txHash: string; resultCode?: string; explorer: string; settlementId: number; reference: string;
+  tokenAmount: string | null; asset: string;
+}
 export interface Payment {
   id: number; status: 'paid' | 'pending' | 'in_run'; reference: string; lot: string | null; notes: string | null; quantity: string; quality: Record<string, number>;
   created_at: string; product: string; unit: string; unit_price: string; gross: string; deductions: Deduction[]; credit_repayment: string; net: string;
   credit_ref: string | null; credit_outstanding: string | null; producer_id: number; producer: string; community: string | null; stellar_address: string;
   run_id: number | null; msg_id: string | null; end_to_end_id: string | null; uetr: string | null; tx_hash: string | null; settled_at: string | null;
   pain001_sha256: string | null; result_code: string | null; explorer?: string | null;
+  token_amount: string | null; fx_rate: string | null;
 }
 export type CreditStatus = 'pendiente' | 'vigente' | 'vencido' | 'pagado' | 'cancelado';
 export interface Credit {
@@ -44,7 +50,7 @@ export interface Credit {
 }
 export interface CreditMovement { id: number; kind: 'desembolso' | 'abono'; amount: string; balance_after: string; tx_hash: string | null; created_at: string; delivery: string | null; settlement_id: number | null; explorer: string | null }
 export interface NewCredit { producerId: number; lenderId: number; purpose: string; principal: string; annualRate: string; termMonths: number; repaymentPercent: string; dueDate: string }
-export interface Lender { id: number; name: string; kind: string; account_id: string; stellar_address: string; active_credits: number; portfolio: string; balance: string | null; canSign: boolean }
+export interface Lender { id: number; name: string; kind: string; account_id: string; stellar_address: string; active_credits: number; portfolio: string; balance: string | null; balanceMxn: string | null; canSign: boolean }
 export interface Metrics {
   month: string;
   kpis: { payments: number; paid: string; gross: string; quantity: string; producers: number; repayments: string; avg_price: string | null };

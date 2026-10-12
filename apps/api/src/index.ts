@@ -2,9 +2,10 @@ import cors from '@fastify/cors';
 import { Keypair } from '@stellar/stellar-sdk';
 import Big from 'big.js';
 import Fastify, { type FastifyReply } from 'fastify';
-import { loadKeys, PG_DIR, settlementAsset } from './config.js';
+import { loadKeys, PG_DIR, settlementAsset, TOKEN_CCY } from './config.js';
 import { cancelCredit, createCredit, disburseCredit, STATUS_SQL, updateCredit, type NewCredit } from './credits.js';
 import { audit, openDb } from './db.js';
+import { toMxn, usdcMxnRate } from './fx.js';
 import { createTestnetAccount } from './testnet.js';
 import { executeRun } from './runs.js';
 import { settle, type DeductionRule } from './settlement.js';
@@ -89,7 +90,12 @@ async function settlementInputs(producerId: number, productId: number, unitPrice
 
 app.get('/api/summary', async () => {
   const coop = (await db.query<{ name: string; stellar_address: string }>(`SELECT name, stellar_address FROM cooperatives WHERE id = 1`)).rows[0]!;
-  return { cooperative: coop, balance: await assetBalance(coop.stellar_address, asset), asset: { code: asset.getCode(), issuer: asset.getIssuer() }, network: NETWORK, signer: coopSigner.kind };
+  const balance = await assetBalance(coop.stellar_address, asset);
+  const fx = await usdcMxnRate().catch(() => null);
+  return {
+    cooperative: coop, balance, balanceMxn: balance && fx ? toMxn(balance, fx.rate) : null, fx,
+    asset: { code: asset.getCode(), issuer: asset.getIssuer() }, network: NETWORK, signer: coopSigner.kind,
+  };
 });
 
 /* ── products and daily price ──────────────────────────────────────────── */
@@ -216,7 +222,8 @@ app.post<{ Body: PaymentBody }>('/api/payments', { schema: paymentSchema }, asyn
   if (unitPrice && unitPrice !== inputs.dailyPrice) await audit(db, 'precio.modificado_en_pago', { reference, dailyPrice: inputs.dailyPrice, used: unitPrice });
 
   const outcome = await executeRun(db, { settlementIds: [s.id], signer: coopSigner, asset, network: NETWORK });
-  return { ...outcome, settlementId: s.id, reference, ...result, explorer: explorerTx(outcome.txHash) };
+  const paid = (await db.query<{ token_amount: string | null }>(`SELECT token_amount::text FROM settlements WHERE id = $1`, [s.id])).rows[0];
+  return { ...outcome, settlementId: s.id, reference, ...result, tokenAmount: paid?.token_amount ?? null, asset: asset.getCode(), explorer: explorerTx(outcome.txHash) };
 });
 
 /** Retry a payment whose transaction the ledger rejected (the settlement stays pending). */
@@ -230,7 +237,8 @@ const PAYMENT_SELECT = `
          s.unit_price::text, s.gross::text, s.deductions, s.credit_repayment::text, s.net::text,
          c.reference AS credit_ref, c.outstanding::text AS credit_outstanding,
          p.id AS producer_id, p.name AS producer, p.community, p.stellar_address,
-         s.run_id, r.msg_id, s.end_to_end_id, s.uetr::text, r.tx_hash, r.settled_at, r.pain001_sha256, r.result_code
+         s.run_id, r.msg_id, s.end_to_end_id, s.uetr::text, r.tx_hash, r.settled_at, r.pain001_sha256, r.result_code,
+         s.token_amount::text, r.fx_rate::text
     FROM settlements s JOIN deliveries d ON d.id = s.delivery_id JOIN products pr ON pr.id = d.product_id
     JOIN producers p ON p.id = d.producer_id LEFT JOIN credits c ON c.id = s.credit_id LEFT JOIN payment_runs r ON r.id = s.run_id`;
 
@@ -284,7 +292,11 @@ app.get('/api/lenders', async () => {
            COUNT(c.id) FILTER (WHERE c.status = 'vigente')::int AS active_credits,
            COALESCE(SUM(c.outstanding) FILTER (WHERE c.status = 'vigente'), 0)::text AS portfolio
       FROM lenders l LEFT JOIN credits c ON c.lender_id = l.id GROUP BY l.id ORDER BY l.id`)).rows;
-  return Promise.all(rows.map(async (l) => ({ ...l, balance: await assetBalance(l.stellar_address, asset), canSign: lenderKeys.has(l.stellar_address) })));
+  const fx = await usdcMxnRate().catch(() => null);
+  return Promise.all(rows.map(async (l) => {
+    const balance = await assetBalance(l.stellar_address, asset);
+    return { ...l, balance, balanceMxn: balance && fx ? toMxn(balance, fx.rate) : null, canSign: lenderKeys.has(l.stellar_address) };
+  }));
 });
 
 app.post<{ Body: { name: string; kind?: string; stellarAddress: string } }>('/api/lenders', {
@@ -328,7 +340,8 @@ app.get<{ Params: { id: string } }>('/api/credits/:id', async (req, reply) => {
   const c = (await db.query(`${CREDIT_SELECT} WHERE c.id = $1`, [id])).rows[0];
   if (!c) return reply.status(404).send({ error: 'no existe' });
   const movements = (await db.query<{ tx_hash: string | null }>(`
-    SELECT m.id, m.kind, m.amount::text, m.balance_after::text, m.tx_hash, m.created_at, d.reference AS delivery, m.settlement_id
+    SELECT m.id, m.kind, m.amount::text, m.balance_after::text, m.tx_hash, m.created_at, d.reference AS delivery, m.settlement_id,
+           m.token_amount::text, m.fx_rate::text
       FROM credit_movements m LEFT JOIN settlements s ON s.id = m.settlement_id LEFT JOIN deliveries d ON d.id = s.delivery_id
      WHERE m.credit_id = $1 ORDER BY m.created_at, m.id`, [id])).rows.map((m) => ({ ...m, explorer: m.tx_hash ? explorerTx(m.tx_hash) : null }));
   return { ...c, movements };
@@ -395,7 +408,7 @@ app.get('/api/audit.csv', async (_req, reply) =>
 app.get<{ Querystring: { date?: string } }>('/api/statement', async (req, reply) => {
   const date = /^\d{4}-\d{2}-\d{2}$/.test(req.query.date ?? '') ? req.query.date! : new Date(Date.now() - 6 * 3600_000).toISOString().slice(0, 10);
   const to = new Date(Math.min(dayEnd(date).getTime(), Date.now()));
-  const statement = await buildStatement(db, { from: dayStart(date), to, asset, network: NETWORK });
+  const statement = await buildStatement(db, { from: dayStart(date), to, asset, network: NETWORK, currency: TOKEN_CCY[asset.getCode()] ?? 'MXN' });
   await audit(db, 'cierre_de_dia', { date });
   return xml(reply, statement, `camt053-${date}.xml`);
 });
