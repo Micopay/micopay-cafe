@@ -170,5 +170,14 @@ app.get<{ Querystring: { from?: string; to?: string } }>('/api/statement', async
 
 app.get('/api/health', async () => ({ ok: true, signer: signer.kind, network: NETWORK, decimals: new Big(1).toFixed(2) }));
 
+// PGlite writes to disk on close: an abrupt exit can leave the data directory unusable.
+for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+  process.once(signal, async () => {
+    await app.close();
+    await db.close();
+    process.exit(0);
+  });
+}
+
 const port = Number(process.env.PORT ?? 8787);
 await app.listen({ port, host: '127.0.0.1' });
