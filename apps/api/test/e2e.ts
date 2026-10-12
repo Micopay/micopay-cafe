@@ -86,9 +86,9 @@ await expectError(`/credits/${mariaCredit.id}/cancel`, {}, /no se ha desembolsad
 const payM = await j('/payments', { producerId: 2, productId: P['Café pergamino']!, quantity: '180.5', quality: { humedad: 11.8, defectos: 6 } });
 check(payM.status === 'settled' && Number(payM.creditRepayment) > 0, 'pago de María con abono', payM.creditRepayment);
 
-// Pedro sells café cereza at the scale: green-cherry deduction, no credit
-const cereza = await j('/payments', { producerId: 3, productId: P['Café cereza']!, quantity: '600', quality: { verdes: 7, vanos: 2 } });
-check(cereza.status === 'settled' && cereza.gross === '10500.00' && cereza.net === '10185.00', 'compra de café cereza con castigo por verdes', cereza.net);
+// Pedro sells café cereza at the scale: price negotiated 30 cents over the reference, no deductions
+const cereza = await j('/payments', { producerId: 3, productId: P['Café cereza']!, quantity: '600', unitPrice: '17.80' });
+check(cereza.status === 'settled' && cereza.gross === '10680.00' && cereza.deductions.length === 0 && cereza.net === '10680.00', 'compra de café cereza a precio negociado', cereza.net);
 
 // New credit for Pedro, cancelled before disbursement
 const due = new Date(); due.setMonth(due.getMonth() + 6);
@@ -112,7 +112,7 @@ check(m.kpis.payments === 4 && m.top.length === 4, 'resumen del mes', `${m.kpis.
 check((await (await fetch(`${API}/payments.csv`)).text()).split('\n').length === 5, 'exportación de pagos');
 check((await (await fetch(`${API}/credits.csv`)).text()).includes('CR-2026-0003'), 'exportación de cartera');
 const auditLog = await j<any[]>('/audit');
-check(['credito.desembolso', 'pago', 'productor.alta', 'credito.cancelado', 'credito.ajuste', 'precio.del_dia'].every((a) => auditLog.some((x) => x.action === a)), 'bitácora de auditoría');
+check(['credito.desembolso', 'pago', 'productor.alta', 'credito.cancelado', 'credito.ajuste', 'precio.del_dia', 'precio.modificado_en_pago'].every((a) => auditLog.some((x) => x.action === a)), 'bitácora de auditoría');
 await xsd('/statement', 'camt.053.001.08');
 
 console.log(failures ? `\n${failures} verificaciones fallaron` : '\nTodo en orden');

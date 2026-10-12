@@ -44,7 +44,7 @@ const OPERACION = [
 ];
 const ADMIN = [
   { to: '/admin', icon: 'home', label: 'Resumen del mes' },
-  { to: '/admin/precios', icon: 'checklist', label: 'Precio del día' },
+  { to: '/admin/precios', icon: 'checklist', label: 'Precio de referencia' },
   { to: '/admin/creditos', icon: 'savings', label: 'Créditos' },
   { to: '/admin/prestamistas', icon: 'account_balance', label: 'Prestamistas' },
   { to: '/admin/auditoria', icon: 'verified_user', label: 'Auditoría' },

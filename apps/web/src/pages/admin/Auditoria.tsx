@@ -7,7 +7,7 @@ import { useData } from '../../useData';
 
 const ACCIONES: Record<string, string> = {
   pago: 'Pago', 'pago.rechazado': 'Pago rechazado', 'productor.alta': 'Alta de productor', 'productor.edicion': 'Edición de productor',
-  'precio.del_dia': 'Precio del día', 'precio.modificado_en_pago': 'Precio ajustado en un pago', 'credito.alta': 'Crédito otorgado',
+  'precio.del_dia': 'Precio de referencia', 'precio.modificado_en_pago': 'Precio negociado en la báscula', 'credito.alta': 'Crédito otorgado',
   'credito.desembolso': 'Desembolso', 'credito.cancelado': 'Crédito cancelado', 'credito.ajuste': 'Ajuste de crédito',
   'prestamista.alta': 'Alta de prestamista', cierre_de_dia: 'Cierre de día', 'demo.inicializada': 'Demo inicializada',
 };

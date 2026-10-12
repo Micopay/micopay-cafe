@@ -138,9 +138,9 @@ export default function RealizarPago() {
                   <div className="grid gap-4 sm:grid-cols-2">
                     <TextField etiqueta={`Peso (${product?.unit ?? 'kg'})`} inputMode="decimal" placeholder="Ej. 250" value={quantity} className="num"
                       onChange={(e) => setQuantity(e.target.value.replace(',', '.'))} error={quantity && !DEC.test(quantity) ? 'Usa hasta 2 decimales' : null} />
-                    <TextField etiqueta={`Precio por ${product?.unit ?? 'kg'} (MXN)`} inputMode="decimal" value={price} className="num"
+                    <TextField etiqueta={`Precio acordado por ${product?.unit ?? 'kg'} (MXN)`} inputMode="decimal" value={price} className="num"
                       onChange={(e) => setPrice(e.target.value.replace(',', '.'))}
-                      ayuda={product?.price ? (precioModificado ? `Precio del día: ${mxn(product.price)}. El cambio queda en la bitácora.` : 'Precio oficial del día') : 'Sin precio del día configurado'} />
+                      ayuda={product?.price ? (precioModificado ? `Negociado sobre la referencia del día (${mxn(product.price)})` : 'Referencia del día; se ajusta si se negocia') : 'Sin precio de referencia configurado'} />
                     {product && product.quality_schema.length > 0 && !conCalidad && (
                       <button type="button" onClick={() => setConCalidad(true)} className="sm:col-span-2 text-left text-[14px] font-bold underline">
                         + Agregar calidad (opcional): {product.quality_schema.map((f) => f.label.toLowerCase()).join(', ')}

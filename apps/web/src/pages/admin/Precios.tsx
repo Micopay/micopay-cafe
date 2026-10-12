@@ -20,8 +20,8 @@ export default function Precios() {
 
   return (
     <>
-      <Titulo cintillo="Administración">Precio del día</Titulo>
-      <p className="max-w-[720px] text-gris mb-6 text-[15px]">El precio que se carga por defecto en la báscula. El operador puede ajustarlo en un pago y el cambio queda en la bitácora.</p>
+      <Titulo cintillo="Administración">Precio de referencia</Titulo>
+      <p className="max-w-[720px] text-gris mb-6 text-[15px]">El precio de referencia que se carga en la báscula. En cada compra se negocia (unos centavos arriba o abajo) y el recibo guarda el precio acordado.</p>
       {error && <div className="mb-4"><ErrorCaja mensaje={error} /></div>}
       {saved && <div className="mb-4 border-2 border-tinta bg-verde-suave px-4 py-3 rounded-sm font-semibold text-[14px]">{saved}</div>}
 

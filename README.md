@@ -70,7 +70,7 @@ It is the language banks, ERPs, auditors and development lenders (FIRA, IFNBs) a
  packages/iso20022   pain.001 · pain.002 · camt.054 · camt.053, XSD-validated
 ```
 
-- **Generic products:** coffee cherry (freshly picked, judged on green cherries and floaters), parchment coffee and cocoa are configured as data (unit, quality attributes, deduction tiers). Adding honey or milk needs no code.
+- **Generic products:** coffee cherry (freshly picked; no standard deductions — the price is negotiated at the scale), parchment coffee and cocoa are configured as data (unit, quality attributes, deduction tiers). Adding honey or milk needs no code.
 - **Credit:** the loan contract is private (database); disbursement, repayments and the evidence hash are on-chain.
 - **Signing:** the demo signs with a local testnet key. In production the cooperative signs from the **MicoPay app** via the existing `/sign-requests` endpoint of the MicoPay backend — no private key ever touches the platform.
 
