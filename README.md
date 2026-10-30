@@ -6,7 +6,7 @@ In Veracruz, during the harvest, *compradoras de café* (seasonal buying points)
 
 MicoPay Café is a payments platform for coffee buyers and agricultural cooperatives built on **Stellar**. The buyer weighs a delivery, the platform settles it (kilos × price − quality deductions − credit repayment), and one atomic Stellar transaction pays every producer **and** repays their crop loan at the same time. Every run produces ISO 20022 messages that validate against the official schemas, and the hash of the payment order is written into the transaction memo, so the bank record and the ledger point at each other.
 
-It is part of the [MicoPay](https://github.com/Micopay) ecosystem: producers receive the money in the MicoPay app and can keep it as digital pesos, send it to their bank via SPEI, or cash out with a MicoPay agent — and the *compradora* itself can be that agent, so the producer can walk away with cash from the same counter.
+It is part of the [MicoPay](https://github.com/Micopay) ecosystem: the integration with the MicoPay app is planned, not available yet. As a future possibility, producers could receive the money in the app, keep it as digital pesos, send it to their bank via SPEI, or cash out with a MicoPay agent. The *compradora* itself could be that agent, so the producer could walk away with cash from the same counter.
 
 > Built for **Find Your Way: Hackathon** (Stellar Passport) · General Track.
 
@@ -110,7 +110,7 @@ Next:
 
 ## Versión en español
 
-MicoPay Café es una plataforma para que las compradoras de café y las cooperativas paguen a los productores por kilo entregado, empezando por el café cereza que se compra en temporada de cosecha. Pagos y abonos a crédito salen en una sola transacción de Stellar, y cada corrida genera mensajes ISO 20022 validados contra los esquemas oficiales, con la huella del `pain.001` anclada en el memo de la transacción. El productor cobra en la app de MicoPay: en pesos digitales, por SPEI o en efectivo con un agente. Los documentos de diseño están en [`PLAN.md`](PLAN.md) y [`docs/`](docs/).
+MicoPay Café es una plataforma para que las compradoras de café y las cooperativas paguen a los productores por kilo entregado, empezando por el café cereza que se compra en temporada de cosecha. Pagos y abonos a crédito salen en una sola transacción de Stellar, y cada corrida genera mensajes ISO 20022 validados contra los esquemas oficiales, con la huella del `pain.001` anclada en el memo de la transacción. La integración con la app de MicoPay está planeada y aún no está disponible; como posibilidad futura, el productor podría cobrar en la app en pesos digitales, por SPEI o en efectivo con un agente. Los documentos de diseño están en [`PLAN.md`](PLAN.md) y [`docs/`](docs/).
 
 ## License
 
