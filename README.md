@@ -10,6 +10,8 @@ It is part of the [MicoPay](https://github.com/Micopay) ecosystem: producers rec
 
 > Built for **Find Your Way: Hackathon** (Stellar Passport) · General Track.
 
+> **Status:** Prototype on Stellar Testnet, not a production service. **Custody:** MicoPay does not hold funds. The demo signs with a local testnet key; the planned production flow has the cooperative sign from the MicoPay app.
+
 ---
 
 ## The problem
