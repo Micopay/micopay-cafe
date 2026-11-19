@@ -4,9 +4,7 @@
 
 In Veracruz, during the harvest, *compradoras de café* (seasonal buying points) open in the coffee towns. Producers bring **café cereza** — the freshly picked fruit they cannot process themselves — and are paid per kilo, in cash, before the buyer carries it to the *beneficio*. MicoPay Café gives those buyers, and cooperatives, a way to pay on the spot without carrying cash.
 
-MicoPay Café is a payments platform for coffee buyers and agricultural cooperatives built on **Stellar**. The buyer weighs a delivery, the platform settles it (kilos × price − quality deductions − credit repayment), and one atomic Stellar transaction pays every producer **and** repays their crop loan at the same time. Every run produces ISO 20022 messages that validate against the official schemas, and the hash of the payment order is written into the transaction memo, so the bank record and the ledger point at each other.
-
-It is part of the [MicoPay](https://github.com/Micopay) ecosystem: the integration with the MicoPay app is planned, not available yet. As a future possibility, producers could receive the money in the app, keep it as digital pesos, send it to their bank via SPEI, or cash out with a MicoPay agent. The *compradora* itself could be that agent, so the producer could walk away with cash from the same counter.
+MicoPay Café is a payments platform for coffee buyers and agricultural cooperatives built on **Stellar**. The buyer weighs a delivery, the platform settles it (kilos × price − quality deductions), and a Stellar transaction pays the producer on the spot. Every payment produces ISO 20022 messages that validate against the official schemas, and the hash of the payment order is written into the transaction memo, so the bank record and the ledger point at each other.
 
 > Built for **Find Your Way: Hackathon** (Stellar Passport) · General Track.
 
@@ -14,11 +12,21 @@ It is part of the [MicoPay](https://github.com/Micopay) ecosystem: the integrati
 
 ---
 
+## How it connects to the MicoPay app (planned)
+
+MicoPay Café is part of the [MicoPay](https://github.com/Micopay) ecosystem. **Today it runs on its own and does not use the MicoPay app yet.** The planned connection:
+
+- **The producer gets paid in the MicoPay app.** There they can keep the money as digital pesos, send it to their bank via SPEI, or cash out with a MicoPay agent.
+- **The *compradora* could be that agent**, so the producer walks away with cash from the same counter where they were weighed and paid.
+- **The buyer signs payments from the MicoPay app**, so no private key ever touches the platform.
+- **One identity across MicoPay products:** the Stellar address.
+
+---
+
 ## The problem
 
 - Coffee producers in southern Mexico sell through layers of intermediaries and are often paid late, in cash, with no record of how the price was computed.
 - Buyers and cooperatives carry cash to collection points during the harvest and reconcile payments by hand.
-- Since the national rural development bank (FND) was dissolved in 2023, producers lost access to affordable crop credit. In 2026, FIRA and Amecafé proposed that **coffee cooperatives disburse credit themselves** — but they have no tool to disburse, collect and report it. ([research, in Spanish](docs/FINANCIAMIENTO.md))
 
 ## What it does
 
@@ -28,7 +36,7 @@ Two areas, mirroring the original desktop apps (operator + admin) of [coffee-pay
 | Screen | What happens |
 |---|---|
 | **Realizar pago** | Pay at the scale: pick the producer, weigh, the daily price loads by default (overrides are audited), optional quality readings apply tiered deductions, confirm — the producer is paid **immediately** in one Stellar transaction |
-| **Productores** | Search, sign-up (validates the Stellar address and whether the account can receive MXNe), profile with delivery history and credits |
+| **Productores** | Search, sign-up (validates the Stellar address and whether the account can receive the payment asset), profile with delivery history |
 | **Historial** | Filters by date, status and producer; payment detail with the ISO 20022 documents, retry only when it is proven the payment did not happen, CSV export, producer receipt |
 
 **Administration**
@@ -36,19 +44,12 @@ Two areas, mirroring the original desktop apps (operator + admin) of [coffee-pay
 |---|---|
 | **Resumen del mes** | KPIs, amount paid per day, top 5 producers by kg |
 | **Precio del día** | Reference price per product, with history |
-| **Créditos** | Crop-loan portfolio — see the lifecycle below |
-| **Prestamistas** | Who funds the loans (IFNB / SOFOM / bank on FIRA funding, or the cooperative as disperser), balances and portfolio |
 | **Auditoría** | Audit log of every action, day close (`camt.053`), CSV exports |
 
-### Crop-loan lifecycle
-
-1. **Grant** — producer, lender, purpose, principal, annual rate, term, repayment % per delivery, due date. Interest is fixed at origination; the loan is *pendiente*.
-2. **Disburse** — the lender pays the producer on Stellar. The memo is the **SHA-256 of the canonical loan terms** (downloadable as JSON), so the contract is anchored next to the money. Status: *vigente*. **Disabled for now:** an unconfirmed disbursement could be sent twice, so the route answers 503 and the seed leaves every loan *pendiente* until disbursement gets the same treatment as payments (below).
-3. **Repay with the harvest** — each payment deducts the repayment and sends it to the lender **in the same atomic transaction** that pays the producer. Every repayment is a movement with its transaction hash.
-4. **Administer** — pause/resume the automatic deduction, change the repayment %, cancel before disbursement. *Vencido* is derived when the due date passes with balance; *pagado* when the balance reaches zero.
+> **Not part of the product:** the demo still contains crop-loan screens (**Créditos**, **Prestamistas**) from the hackathon. Credit is out of scope for now: those screens are not maintained, disbursement is disabled (the route answers 503) and seeded loans stay *pendiente*. The background research is in [`docs/FINANCIAMIENTO.md`](docs/FINANCIAMIENTO.md) (Spanish).
 
 ### Every payment, end to end
-`kilos × price − quality deduction − loan repayment` → **pain.001** with kilos, price, deductions and repayment in structured remittance → its SHA-256 becomes the memo of **one Stellar transaction** (producer + lender, all or nothing) → **pain.002** status → **camt.054** receipt for the producer → **camt.053** statement with balances reconstructed from Horizon.
+`kilos × price − quality deduction` → **pain.001** with kilos, price and deductions in structured remittance → its SHA-256 becomes the memo of **the Stellar transaction** → **pain.002** status → **camt.054** receipt for the producer → **camt.053** statement with balances reconstructed from Horizon.
 
 ### Payments that never pay twice
 
@@ -64,13 +65,13 @@ API fields: `status` (`settled`, `unconfirmed`, `failed_onchain`, `not_executed`
 
 ### Why Stellar
 
-- **Atomic multi-operation transactions** make "pay the producer *and* collect the loan" a single, indivisible event — the property lenders care about most.
-- Settlement in seconds for a fraction of a cent, in a peso-pegged token (MXNe; the demo issues its own on testnet).
+- Settlement in seconds for a fraction of a cent.
+- **Any Stellar asset:** the payment asset is configuration, not code, so a buyer can pay in an existing tokenized peso, one issued by a third party, or digital dollars. The demo uses MicoPay's testnet USDC.
 - A public, tamper-evident ledger: the cooperative's records can be checked without trusting the cooperative or us. Personal data never goes on-chain — only amounts and hashes.
 
 ### Why ISO 20022
 
-It is the language banks, ERPs, auditors and development lenders (FIRA, IFNBs) already read. We use the **customer-to-bank** messages (`pain.001`, `pain.002`) and the account-reporting ones (`camt.054`, `camt.053`). Kilos, price and quality deductions travel in `RmtInf/Strd`; the currency is always ISO 4217 (`MXN`) and the Stellar token is described in a single `SplmtryData` envelope. Every generated message is validated against the official XSD in the test suite. See [`docs/ISO20022.md`](docs/ISO20022.md) for the full study (in Spanish), including why the previous XRPL version's messages failed validation.
+It is the language banks, ERPs and auditors already read. We use the **customer-to-bank** messages (`pain.001`, `pain.002`) and the account-reporting ones (`camt.054`, `camt.053`). Kilos, price and quality deductions travel in `RmtInf/Strd`; the currency is always ISO 4217 (`MXN`) and the Stellar token is described in a single `SplmtryData` envelope. Every generated message is validated against the official XSD in the test suite. See [`docs/ISO20022.md`](docs/ISO20022.md) for the full study (in Spanish), including why the previous XRPL version's messages failed validation.
 
 ## Architecture
 
@@ -85,7 +86,6 @@ It is the language banks, ERPs, auditors and development lenders (FIRA, IFNBs) a
 ```
 
 - **Generic products:** coffee cherry (freshly picked; no standard deductions — the price is negotiated at the scale), parchment coffee and cocoa are configured as data (unit, quality attributes, deduction tiers). Adding honey or milk needs no code.
-- **Credit:** the loan contract is private (database); disbursement, repayments and the evidence hash are on-chain.
 - **Signing:** the demo signs with a local testnet key. The plan is for the cooperative to sign from the **MicoPay app** via the `/sign-requests` endpoint of the MicoPay backend, so no private key touches the platform; it is disabled for payments until that endpoint returns the signed envelope.
 
 ## Run it locally
@@ -94,12 +94,14 @@ Requirements: Node 22+. No database to install (PGlite runs Postgres in-process)
 
 ```bash
 npm install
-npm run seed -w apps/api   # creates testnet accounts, funds demo USDC, loads a cooperative, producers and two pending loans
+npm run seed -w apps/api   # creates testnet accounts, funds demo USDC, loads a cooperative and producers
 npm run dev:api            # http://127.0.0.1:8787
 npm run dev:web            # http://localhost:5180
 ```
 
-Then: **Realizar pago** → pick Pedro Martínez → *Café cereza* is preselected at the demo price → weigh 600 kg → **Ejecutar pago**. Open the transaction on stellar.expert and the ISO documents under **Historial**; the loans under **Créditos** stay pending while disbursement is disabled.
+Then: **Realizar pago** → pick Pedro Martínez → *Café cereza* is preselected at the demo price → weigh 600 kg → **Ejecutar pago**. Open the transaction on stellar.expert and the ISO documents under **Historial**.
+
+> **Running it outside MicoPay:** the seed mints demo USDC with the issuer key of MicoPay's testnet USDC (`~/.micopay/ensayo-usdc.json`), so it does not run as is without that key. The exchange rate comes from `api.micopay.app`; set `FX_MXN_PER_USD` (for example `17.20`) if it does not answer.
 
 ```bash
 npm test                   # ISO 20022 messages vs official XSDs + settlement math
@@ -112,19 +114,18 @@ The API only starts on a database the seed created with the current schema (a "s
 
 ## Status and roadmap
 
-Working today on testnet: pay at the scale with unconfirmed-payment protection, producers, daily price, quality deductions, crop-loan administration (grant, pause, cancel; disbursement disabled), ISO 20022 messages, receipts, monthly summary, audit log, day close and exports.
+Working today on testnet: pay at the scale with unconfirmed-payment protection, producers, daily price, quality deductions, ISO 20022 messages, receipts, monthly summary, audit log, day close and exports.
 
 Next:
 1. Sign-in and signing with the MicoPay app (`/sign-requests`), replacing the local demo signer.
 2. Shared users with the MicoPay backend on AWS (identity = Stellar address).
-3. Operator roles and sign-in (the original app had operator/admin accounts), and lender reporting for FIRA credit dispersers.
+3. Operator roles and sign-in (the original app had operator/admin accounts).
 4. The next leg of the supply chain: *compradora* → *beneficio*, with the same delivery → settlement → payment model.
-5. Monthly anchoring of the credit portfolio hash on Stellar.
-6. Optional quality escrow (Soroban), shared with MicoPay's rental platform.
+5. Optional quality escrow (Soroban), shared with MicoPay's rental platform.
 
 ## Versión en español
 
-MicoPay Café es una plataforma para que las compradoras de café y las cooperativas paguen a los productores por kilo entregado, empezando por el café cereza que se compra en temporada de cosecha. Pagos y abonos a crédito salen en una sola transacción de Stellar, y cada corrida genera mensajes ISO 20022 validados contra los esquemas oficiales, con la huella del `pain.001` anclada en el memo de la transacción. La integración con la app de MicoPay está planeada y aún no está disponible; como posibilidad futura, el productor podría cobrar en la app en pesos digitales, por SPEI o en efectivo con un agente. Los documentos de diseño están en [`PLAN.md`](PLAN.md) y [`docs/`](docs/).
+MicoPay Café es una plataforma para que las compradoras de café y las cooperativas paguen a los productores por kilo entregado, empezando por el café cereza que se compra en temporada de cosecha. El pago sale al momento en una transacción de Stellar, con cualquier activo, y cada pago genera mensajes ISO 20022 validados contra los esquemas oficiales, con la huella del `pain.001` anclada en el memo de la transacción. La conexión con la app de MicoPay está planeada y aún no está disponible: el productor cobraría en la app y podría guardar pesos digitales, mandarlos a su banco por SPEI o cambiarlos por efectivo con un agente, que podría ser la misma compradora. Los documentos de diseño están en [`PLAN.md`](PLAN.md) y [`docs/`](docs/).
 
 ## License
 
