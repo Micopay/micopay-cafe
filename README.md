@@ -46,7 +46,7 @@ Two areas, mirroring the original desktop apps (operator + admin) of [coffee-pay
 | **Precio del día** | Reference price per product, with history |
 | **Auditoría** | Audit log of every action, day close (`camt.053`), CSV exports |
 
-> **Not part of the product:** the demo still contains crop-loan screens (**Créditos**, **Prestamistas**) from the hackathon. Credit is out of scope for now: those screens are not maintained, disbursement is disabled (the route answers 503) and seeded loans stay *pendiente*. The background research is in [`docs/FINANCIAMIENTO.md`](docs/FINANCIAMIENTO.md) (Spanish).
+> **Crop loans: a possible future feature.** The demo contains crop-loan screens (**Créditos**, **Prestamistas**) from the hackathon: a lender grants a loan and each payment repays part of it in the same Stellar transaction. It is not part of the current product, disbursement is disabled (the route answers 503) and seeded loans stay *pendiente*. It may be built later; the background research (FIRA and coffee cooperatives disbursing credit) is in [`docs/FINANCIAMIENTO.md`](docs/FINANCIAMIENTO.md) (Spanish).
 
 ### Every payment, end to end
 `kilos × price − quality deduction` → **pain.001** with kilos, price and deductions in structured remittance → its SHA-256 becomes the memo of **the Stellar transaction** → **pain.002** status → **camt.054** receipt for the producer → **camt.053** statement with balances reconstructed from Horizon.
@@ -122,10 +122,11 @@ Next:
 3. Operator roles and sign-in (the original app had operator/admin accounts).
 4. The next leg of the supply chain: *compradora* → *beneficio*, with the same delivery → settlement → payment model.
 5. Optional quality escrow (Soroban), shared with MicoPay's rental platform.
+6. Possibly, crop loans repaid with the harvest (see the note above).
 
 ## Versión en español
 
-MicoPay Café es una plataforma para que las compradoras de café y las cooperativas paguen a los productores por kilo entregado, empezando por el café cereza que se compra en temporada de cosecha. El pago sale al momento en una transacción de Stellar, con cualquier activo, y cada pago genera mensajes ISO 20022 validados contra los esquemas oficiales, con la huella del `pain.001` anclada en el memo de la transacción. La conexión con la app de MicoPay está planeada y aún no está disponible: el productor cobraría en la app y podría guardar pesos digitales, mandarlos a su banco por SPEI o cambiarlos por efectivo con un agente, que podría ser la misma compradora. Los documentos de diseño están en [`PLAN.md`](PLAN.md) y [`docs/`](docs/).
+MicoPay Café es una plataforma para que las compradoras de café y las cooperativas paguen a los productores por kilo entregado, empezando por el café cereza que se compra en temporada de cosecha. El pago sale al momento en una transacción de Stellar, con cualquier activo, y cada pago genera mensajes ISO 20022 validados contra los esquemas oficiales, con la huella del `pain.001` anclada en el memo de la transacción. La conexión con la app de MicoPay está planeada y aún no está disponible: el productor cobraría en la app y podría guardar pesos digitales, mandarlos a su banco por SPEI o cambiarlos por efectivo con un agente, que podría ser la misma compradora. Los créditos de avío que se pagan con la cosecha quedan como posible implementación a futuro. Los documentos de diseño están en [`PLAN.md`](PLAN.md) y [`docs/`](docs/).
 
 ## License
 
