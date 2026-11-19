@@ -117,6 +117,7 @@ const EN: Record<string, string> = {
   'Confirmar pago': 'Confirm payment',
   'Cancelar': 'Cancel',
   'Stellar rechazó la transacción ({code}). No se movió dinero; puedes reintentar desde el historial.': 'Stellar rejected the transaction ({code}). No money moved; you can retry from History.',
+  'El pago quedó sin confirmar. No lo repitas; revisa el historial.': 'The payment is unconfirmed. Do not repeat it; check History.',
   'Pago exitoso en Stellar': 'Payment settled on Stellar',
   'Entrega {ref}': 'Delivery {ref}',
   ' · abono al crédito {amount} en la misma transacción': ' · loan repayment {amount} in the same transaction',

@@ -31,7 +31,7 @@ export interface Preview {
 }
 export interface PaymentInput { producerId: number; productId: number; quantity: string; quality: Record<string, number>; unitPrice?: string; lot?: string; notes?: string }
 export interface PaymentResult extends Preview {
-  runId: number; status: 'settled' | 'rejected'; txHash: string; resultCode?: string; explorer: string; settlementId: number; reference: string;
+  runId: number; status: 'settled' | 'unconfirmed' | 'failed_onchain' | 'not_executed' | 'needs_review'; txHash: string; resultCode?: string; explorer: string; settlementId: number; reference: string;
   tokenAmount: string | null; asset: string;
 }
 export interface Payment {

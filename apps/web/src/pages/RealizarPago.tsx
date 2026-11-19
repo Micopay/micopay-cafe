@@ -61,7 +61,9 @@ export default function RealizarPago() {
     setPaying(true); setError(null);
     try {
       const r = await api.pay(input);
-      if (r.status !== 'settled') setError(t('Stellar rechazó la transacción ({code}). No se movió dinero; puedes reintentar desde el historial.', { code: r.resultCode ?? '' }));
+      // Only a failed ledger record or an envelope that never left proves no money moved.
+      if (r.status === 'failed_onchain' || r.status === 'not_executed') setError(t('Stellar rechazó la transacción ({code}). No se movió dinero; puedes reintentar desde el historial.', { code: r.resultCode ?? '' }));
+      else if (r.status !== 'settled') setError(t('El pago quedó sin confirmar. No lo repitas; revisa el historial.'));
       else { setResult(r); setQuantity(''); setQuality({}); setLot(''); setNotes(''); producer.reload(); }
     } catch (e) {
       setError((e as Error).message);

@@ -20,7 +20,8 @@ export default function PagoDetalle() {
     setRetrying(true); setError(null);
     try {
       const r = await api.retry(id);
-      if (r.status !== 'settled') setError(t('Stellar volvió a rechazar la transacción.'));
+      if (r.status === 'failed_onchain' || r.status === 'not_executed') setError(t('Stellar volvió a rechazar la transacción.'));
+      else if (r.status !== 'settled') setError(t('El pago quedó sin confirmar. No lo repitas; revisa el historial.'));
       p.reload();
     } catch (e) { setError((e as Error).message); } finally { setRetrying(false); }
   }
