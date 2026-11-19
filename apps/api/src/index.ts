@@ -39,7 +39,9 @@ const lenderKeys = new Map([keys.lender, ...(keys.extraLenders ?? [])].map((s) =
 const app = Fastify({ logger: { level: 'warn' } });
 await app.register(cors, { origin: true });
 app.setErrorHandler((err, _req, reply) => {
-  reply.status(err.statusCode && err.statusCode < 500 ? err.statusCode : 400).send({ error: err.message });
+  // HttpError carries its status (409 open attempt, 503 disabled); other errors stay 400 as before.
+  const status = err instanceof HttpError ? err.statusCode : err.statusCode && err.statusCode < 500 ? err.statusCode : 400;
+  reply.status(status).send({ error: err.message });
 });
 
 /* ── helpers ───────────────────────────────────────────────────────────── */
@@ -200,7 +202,7 @@ const paymentSchema = { body: { type: 'object', required: ['producerId', 'produc
   lot: { type: 'string', maxLength: 35 }, notes: { type: 'string', maxLength: 500 }, clientRef: UUID } } };
 
 /** SHA-256 of the request with sorted keys and without clientRef: a replay must carry the same content. */
-export function requestSha256(body: PaymentBody): string {
+function requestSha256(body: PaymentBody): string {
   const { clientRef: _ref, ...rest } = body;
   const sorted = (v: unknown): unknown => v && typeof v === 'object' && !Array.isArray(v)
     ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => a.localeCompare(b)).map(([k, x]) => [k, sorted(x)]))

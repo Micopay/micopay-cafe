@@ -52,6 +52,10 @@ class Discrepancy extends Error {}
 /** One promise chain per key: work for the same key runs one at a time. */
 class KeyedLock {
   private tails = new Map<string, Promise<unknown>>();
+  /** Whether work for this key is running or queued. */
+  busy(key: string): boolean {
+    return this.tails.has(key);
+  }
   async run<T>(key: string, fn: () => Promise<T>): Promise<T> {
     const prev = this.tails.get(key) ?? Promise.resolve();
     const next = prev.catch(() => undefined).then(fn);
@@ -402,11 +406,11 @@ export function createPaymentEngine(deps: EngineDeps) {
   async function markUnconfirmed(runId: number, code: string | undefined) {
     const run = await payloadOf(db, runId);
     if (!run) return;
-    await db.query(
-      `UPDATE payment_runs SET status = 'unconfirmed', result_code = $2, pain002 = $3 WHERE id = $1 AND status = 'submitting'`,
+    const moved = await db.query(
+      `UPDATE payment_runs SET status = 'unconfirmed', result_code = $2, pain002 = $3 WHERE id = $1 AND status = 'submitting' RETURNING id`,
       [runId, code ?? null, statusReport(run.payload, 'PDNG', { txHash: run.tx_hash })],
     );
-    await audit(db, 'pago.sin_confirmar', { run: run.payload.msgId, tx: run.tx_hash, code });
+    if (moved.rows.length) await audit(db, 'pago.sin_confirmar', { run: run.payload.msgId, tx: run.tx_hash, code });
   }
 
   async function markNeedsReview(runId: number, from: RunStatus[], reason: string) {
@@ -715,8 +719,23 @@ export function createPaymentEngine(deps: EngineDeps) {
     for (const r of open) await reconcileRun(r.id).catch((err) => log(`reconciliación del intento ${r.id}`, err));
   }
 
-  /** Periodic pass: open attempts every time; needs_review every 10 minutes for its first day. */
+  let ticking = false;
+
+  /**
+   * Periodic pass: open attempts every time; needs_review every 10 minutes for its
+   * first day. Attempts being sent right now are skipped, and passes never overlap.
+   */
   async function tick(): Promise<void> {
+    if (ticking) return;
+    ticking = true;
+    try {
+      await tickOnce();
+    } finally {
+      ticking = false;
+    }
+  }
+
+  async function tickOnce(): Promise<void> {
     const due = (await db.query<{ id: number }>(
       `SELECT id FROM payment_runs
         WHERE status IN ('submitting', 'unconfirmed')
@@ -724,10 +743,13 @@ export function createPaymentEngine(deps: EngineDeps) {
                AND (checked_at IS NULL OR checked_at < NOW() - INTERVAL '10 minutes'))
         ORDER BY id`,
     )).rows;
-    for (const r of due) await reconcileRun(r.id).catch((err) => log(`reconciliación del intento ${r.id}`, err));
+    for (const r of due) {
+      if (runLock.busy(String(r.id))) continue;
+      await reconcileRun(r.id).catch((err) => log(`reconciliación del intento ${r.id}`, err));
+    }
   }
 
-  /** On a payment detail: reconcile its open attempt at most every 10 seconds. */
+  /** On a payment detail: reconcile its open attempt at most every 10 seconds, never waiting on a send in progress. */
   async function refresh(settlementId: number): Promise<void> {
     const r = (await db.query<{ run_id: number }>(
       `SELECT s.run_id FROM settlements s JOIN payment_runs r ON r.id = s.run_id
@@ -735,7 +757,7 @@ export function createPaymentEngine(deps: EngineDeps) {
           AND (r.checked_at IS NULL OR r.checked_at < NOW() - INTERVAL '10 seconds')`,
       [settlementId],
     )).rows[0];
-    if (r) await reconcileRun(r.run_id).catch((err) => log(`reconciliación del intento ${r.run_id}`, err));
+    if (r && !runLock.busy(String(r.run_id))) await reconcileRun(r.run_id).catch((err) => log(`reconciliación del intento ${r.run_id}`, err));
   }
 
   return { createAndPay, retry, reconcileRun, recover, tick, refresh, lookupRef, view, applySettled };

@@ -339,6 +339,18 @@ describe('firma y caídas', () => {
     expect(await count(w.db, `SELECT 1 FROM payment_runs`)).toBe(0);
   });
 
+  it('abrir el detalle o la pasada periódica no esperan a un envío en curso', async () => {
+    const w = await world();
+    w.chain.onSubmit = () => never();
+    void w.engine.createAndPay(payment());
+    await expect.poll(() => count(w.db, `SELECT 1 FROM payment_runs WHERE status = 'submitting'`)).toBe(1);
+    const s = await one<{ id: number }>(w.db, `SELECT id FROM settlements`);
+    const quick = (p: Promise<void>) => Promise.race([p.then(() => 'listo'), new Promise((r) => setTimeout(() => r('esperando'), 2000))]);
+    expect(await quick(w.engine.refresh(s.id))).toBe('listo');
+    expect(await quick(w.engine.tick())).toBe('listo');
+    expect(await count(w.db, `SELECT 1 FROM payment_runs WHERE status = 'submitting'`)).toBe(1);
+  });
+
   it('caída antes de firmar (en disco): al arrancar el intento se cierra como no ejecutado', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'cafe-'));
     dirs.push(dir);
