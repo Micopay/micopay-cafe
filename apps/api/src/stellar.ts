@@ -1,5 +1,5 @@
 import {
-  Asset, Horizon, Keypair, Memo, Networks, Operation, StrKey, Transaction, TransactionBuilder,
+  Account, Asset, Horizon, Keypair, Memo, Networks, Operation, StrKey, Transaction, TransactionBuilder, xdr,
 } from '@stellar/stellar-sdk';
 
 export const HORIZON_URL = process.env.HORIZON_URL ?? 'https://horizon-testnet.stellar.org';
@@ -28,16 +28,15 @@ export interface RunPayment {
  * pain.001 of a run, the canonical terms of a credit), so the off-chain record
  * and the ledger point at each other.
  */
-export async function buildPaymentTransaction(params: {
-  source: string;
+export function buildPaymentTransaction(params: {
+  account: Account;
   asset: Asset;
   payments: RunPayment[];
   memoSha256: string;
-}): Promise<Transaction> {
+}): Transaction {
   if (params.payments.length === 0) throw new Error('la transacción no tiene pagos');
   if (params.payments.length > 100) throw new Error('una transacción admite hasta 100 operaciones');
-  const account = await horizon.loadAccount(params.source);
-  const builder = new TransactionBuilder(account, { fee: '1000', networkPassphrase: NETWORK_PASSPHRASE })
+  const builder = new TransactionBuilder(params.account, { fee: '1000', networkPassphrase: NETWORK_PASSPHRASE })
     .addMemo(Memo.hash(params.memoSha256))
     .setTimeout(300);
   for (const p of params.payments) {
@@ -118,21 +117,125 @@ export class MicopaySigner implements Signer {
   }
 }
 
-export interface SubmitResult {
-  successful: boolean;
-  hash: string;
-  code?: string;
+/* ── What Horizon can prove ─────────────────────────────────────────────── */
+
+/**
+ * The outcome of one POST. Only a 200 that names the expected hash and a ledger
+ * proves anything; every other answer (any 400 code, timeouts, 5xx) is unknown,
+ * because none of them proves the envelope never made it into a ledger.
+ */
+export type SubmitOutcome =
+  | { kind: 'success'; hash: string; ledger: number }
+  | { kind: 'unknown'; code?: string };
+
+/** A transaction record as Horizon stores it once it is in a ledger. */
+export type Lookup =
+  | { kind: 'found'; hash: string; ledger: number; successful: boolean; closedAt: Date; resultCode: string }
+  | { kind: 'not_found' }
+  | { kind: 'error' };
+
+export interface ChainTip {
+  networkPassphrase: string;
+  latestLedger: number;
+  latestClosedAt: Date;
 }
 
-export async function submit(tx: Transaction): Promise<SubmitResult> {
+/** Everything the payment flow asks of the network, so tests can stand in for Horizon. */
+export interface Chain {
+  loadAccount(address: string): Promise<Account>;
+  tip(): Promise<ChainTip>;
+  ledgerClosedAt(seq: number): Promise<Date>;
+  submit(tx: Transaction): Promise<SubmitOutcome>;
+  lookup(hash: string): Promise<Lookup>;
+}
+
+const isLedger = (v: unknown): v is number => Number.isInteger(v) && (v as number) > 0;
+
+/** Readable failure code from a transaction result: the first failed operation, else the transaction code. */
+export function resultCode(resultXdr: string): string {
   try {
-    const res = await horizon.submitTransaction(tx);
-    return { successful: res.successful, hash: res.hash };
-  } catch (err: unknown) {
-    const codes = (err as { response?: { data?: { extras?: { result_codes?: { transaction?: string; operations?: string[] } } } } })
-      .response?.data?.extras?.result_codes;
-    const op = codes?.operations?.find((c) => c !== 'op_success');
-    return { successful: false, hash: tx.hash().toString('hex'), code: op ?? codes?.transaction ?? 'tx_failed' };
+    const result = xdr.TransactionResult.fromXDR(resultXdr, 'base64').result();
+    const tx = result.switch().name;
+    if (tx === 'txFailed') {
+      for (const op of result.results()) {
+        const inner = op.switch().name === 'opInner' ? op.tr().value() : null;
+        const name = inner ? (inner as { switch(): { name: string } }).switch().name : op.switch().name;
+        if (!/Success$/.test(name)) return name;
+      }
+    }
+    return tx;
+  } catch {
+    return 'resultado ilegible';
+  }
+}
+
+async function getJson(url: string): Promise<{ status: number; body: unknown }> {
+  const res = await fetch(url, { signal: AbortSignal.timeout(30_000) });
+  return { status: res.status, body: await res.json().catch(() => null) };
+}
+
+export class HorizonChain implements Chain {
+  constructor(private readonly url = HORIZON_URL) {}
+
+  loadAccount(address: string): Promise<Account> {
+    return new Horizon.Server(this.url).loadAccount(address);
+  }
+
+  async tip(): Promise<ChainTip> {
+    const { status, body } = await getJson(`${this.url}/`);
+    const b = body as { network_passphrase?: string; history_latest_ledger?: number; history_latest_ledger_closed_at?: string } | null;
+    if (status !== 200 || !b?.network_passphrase || !isLedger(b.history_latest_ledger) || !b.history_latest_ledger_closed_at) {
+      throw new Error(`Horizon no devolvió el último ledger (${status})`);
+    }
+    return { networkPassphrase: b.network_passphrase, latestLedger: b.history_latest_ledger, latestClosedAt: new Date(b.history_latest_ledger_closed_at) };
+  }
+
+  async ledgerClosedAt(seq: number): Promise<Date> {
+    const { status, body } = await getJson(`${this.url}/ledgers/${seq}`);
+    const b = body as { sequence?: number; closed_at?: string } | null;
+    if (status !== 200 || b?.sequence !== seq || !b.closed_at) throw new Error(`Horizon no devolvió el ledger ${seq} (${status})`);
+    return new Date(b.closed_at);
+  }
+
+  async submit(tx: Transaction): Promise<SubmitOutcome> {
+    const expected = tx.hash().toString('hex');
+    try {
+      const res = await fetch(`${this.url}/transactions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ tx: tx.toEnvelope().toXDR('base64') }),
+        // Horizon answers a synchronous submission within about a minute.
+        signal: AbortSignal.timeout(75_000),
+      });
+      const body = (await res.json().catch(() => null)) as {
+        hash?: string; ledger?: number; successful?: boolean;
+        extras?: { result_codes?: { transaction?: string; operations?: string[] } };
+      } | null;
+      if (res.status === 200 && body?.successful === true && body.hash === expected && isLedger(body.ledger)) {
+        return { kind: 'success', hash: expected, ledger: body.ledger };
+      }
+      const codes = body?.extras?.result_codes;
+      return { kind: 'unknown', code: codes?.operations?.find((c) => c !== 'op_success') ?? codes?.transaction ?? `http_${res.status}` };
+    } catch (err) {
+      return { kind: 'unknown', code: (err as Error).name === 'TimeoutError' ? 'timeout' : 'red' };
+    }
+  }
+
+  async lookup(hash: string): Promise<Lookup> {
+    try {
+      const { status, body } = await getJson(`${this.url}/transactions/${hash}`);
+      if (status === 404) return { kind: 'not_found' };
+      const b = body as { hash?: string; ledger?: number; successful?: unknown; created_at?: string; result_xdr?: string } | null;
+      if (status !== 200 || b?.hash !== hash || !isLedger(b.ledger) || typeof b.successful !== 'boolean' || !b.created_at) {
+        return { kind: 'error' };
+      }
+      return {
+        kind: 'found', hash, ledger: b.ledger, successful: b.successful, closedAt: new Date(b.created_at),
+        resultCode: b.result_xdr ? resultCode(b.result_xdr) : 'sin resultado',
+      };
+    } catch {
+      return { kind: 'error' };
+    }
   }
 }
 

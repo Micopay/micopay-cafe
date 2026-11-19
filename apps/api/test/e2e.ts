@@ -1,11 +1,12 @@
 /**
  * End-to-end check against a running API on Stellar testnet (after `npm run seed`):
  *   npx tsx apps/api/test/e2e.ts
- * Covers: daily price, producer signup, pay at the scale with quality deduction and
- * credit repayment, credit lifecycle (create, disburse, cancel, pause), Horizon
- * verification of both memos, ISO messages against the XSDs, exports and audit.
+ * Covers: daily price, producer signup, pay at the scale with quality deduction,
+ * replay of a payment by its scale reference, credit lifecycle without disbursement
+ * (disabled until it handles unconfirmed submissions), Horizon verification of the
+ * run memo, ISO messages against the XSDs, exports and audit.
  */
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { validateXML } from 'xmllint-wasm';
 
@@ -49,27 +50,31 @@ check(products[0].name === 'Café cereza' && products[0].price === '17.50', 'caf
 await j('/prices', { productId: P['Café pergamino'], price: '85.00' });
 check((await j<any[]>('/products')).find((p) => p.name === 'Café pergamino').price === '85.00', 'precio del día actualizado');
 
-// Credits as seeded: Juan disbursed (anchored), María pending
+// Credits as seeded: both pending, because disbursement is disabled
 const credits = await j<any[]>('/credits');
 const juanCredit = credits.find((c) => c.producer === 'Juan Pérez López');
 const mariaCredit = credits.find((c) => c.producer === 'María Hernández Gómez');
-check(juanCredit?.status === 'vigente' && juanCredit.total_due === '12510.00', 'crédito de Juan vigente, total con interés', juanCredit?.total_due);
+check(juanCredit?.status === 'pendiente' && juanCredit.total_due === '12510.00', 'crédito de Juan pendiente, total con interés', juanCredit?.total_due);
 check(mariaCredit?.status === 'pendiente', 'crédito de María pendiente');
-const terms = await (await fetch(`${API}/credits/${juanCredit.id}/terms`)).text();
-const disb = await memoHex(juanCredit.disbursement_tx);
-check(disb.memo_type === 'hash' && disb.hex === createHash('sha256').update(terms).digest('hex'), 'memo del desembolso = SHA-256 de los términos');
+await expectError(`/credits/${mariaCredit.id}/disburse`, {}, /desactivado/, 'el desembolso está desactivado');
 
-// Pay Juan at the scale: quality deduction + automatic credit repayment
-const pay = await j('/payments', { producerId: 1, productId: P['Café pergamino']!, quantity: '250', quality: { humedad: 13.5, defectos: 3 }, lot: 'LOTE-45' });
-check(pay.status === 'settled' && pay.gross === '21250.00' && pay.creditRepayment === '5100.00' && pay.net === '15300.00', 'pago de Juan con castigo y abono', `${pay.net} + ${pay.creditRepayment}`);
+// Pay Juan at the scale with a scale reference: quality deduction, no repayment of a pending credit
+const ref = randomUUID();
+const juanBody = { producerId: 1, productId: P['Café pergamino']!, quantity: '250', quality: { humedad: 13.5, defectos: 3 }, lot: 'LOTE-45', clientRef: ref };
+const pay = await j('/payments', juanBody);
+check(pay.status === 'settled' && pay.gross === '21250.00' && pay.creditRepayment === '0.00' && pay.net === '20400.00', 'pago de Juan con castigo', pay.net);
+const again = await j('/payments', juanBody);
+check(again.replayed === true && again.settlementId === pay.settlementId && again.txHash === pay.txHash, 'repetir con la misma referencia devuelve el mismo pago');
+await expectError('/payments', { ...juanBody, quantity: '251' }, /otros datos/, 'la misma referencia con otros datos se rechaza');
+check((await j(`/payments/by-ref/${ref}`)).settlementId === pay.settlementId, 'recuperar el pago por su referencia');
 const run = await memoHex(pay.txHash);
 const detail = await j(`/payments/${pay.settlementId}`);
 const pain001 = await xsd(`/runs/${detail.run_id}/pain001`, 'pain.001.001.09');
-check(run.successful && run.operation_count === 2 && run.hex === createHash('sha256').update(pain001).digest('hex'), 'una transacción, 2 operaciones, memo = SHA-256 del pain.001');
+check(run.successful && run.operation_count === 1 && run.hex === createHash('sha256').update(pain001).digest('hex'), 'una transacción, 1 operación (sin abono), memo = SHA-256 del pain.001');
 await xsd(`/runs/${detail.run_id}/pain002`, 'pain.002.001.10');
 await xsd(`/payments/${pay.settlementId}/camt054`, 'camt.054.001.08');
-const juanAfter = await j(`/credits/${juanCredit.id}`);
-check(juanAfter.outstanding === '7410.00' && juanAfter.movements.length === 2 && juanAfter.movements[1].tx_hash === pay.txHash, 'movimiento de abono con su hash', juanAfter.outstanding);
+check(detail.paymentState === 'paid' && detail.retryAllowed === false, 'estado del pago y sin reintento');
+await expectError(`/payments/${pay.settlementId}/retry`, {}, /ya se hizo/, 'un pago hecho no se reintenta');
 
 // Pause automatic deduction: next payment carries no repayment
 await j(`/credits/${juanCredit.id}`, { autoDeduct: false }, 'PATCH');
@@ -77,14 +82,11 @@ const paused = await j('/payments/preview', { producerId: 1, productId: P['Café
 check(paused.creditRepayment === '0.00', 'con el descuento pausado no hay abono');
 await j(`/credits/${juanCredit.id}`, { autoDeduct: true }, 'PATCH');
 
-// María: cannot repay before disbursement, then disburse, then pay
+// María: a pending credit is never repaid at the scale
 const before = await j('/payments/preview', { producerId: 2, productId: P['Café cereza']!, quantity: '100', quality: {} });
 check(before.creditRepayment === '0.00', 'un crédito pendiente no se descuenta');
-const dm = await j(`/credits/${mariaCredit.id}/disburse`, {});
-check(/^[0-9a-f]{64}$/.test(dm.txHash), 'desembolso de María en Stellar', dm.txHash.slice(0, 12));
-await expectError(`/credits/${mariaCredit.id}/cancel`, {}, /no se ha desembolsado/, 'no se cancela un crédito ya desembolsado');
 const payM = await j('/payments', { producerId: 2, productId: P['Café pergamino']!, quantity: '180.5', quality: { humedad: 11.8, defectos: 6 } });
-check(payM.status === 'settled' && Number(payM.creditRepayment) > 0, 'pago de María con abono', payM.creditRepayment);
+check(payM.status === 'settled' && payM.creditRepayment === '0.00', 'pago de María sin abono', payM.net);
 
 // Pedro sells café cereza at the scale: price negotiated 30 cents over the reference, no deductions
 const cereza = await j('/payments', { producerId: 3, productId: P['Café cereza']!, quantity: '600', unitPrice: '17.80' });
@@ -112,7 +114,7 @@ check(m.kpis.payments === 4 && m.top.length === 4, 'resumen del mes', `${m.kpis.
 check((await (await fetch(`${API}/payments.csv`)).text()).split('\n').length === 5, 'exportación de pagos');
 check((await (await fetch(`${API}/credits.csv`)).text()).includes('CR-2026-0003'), 'exportación de cartera');
 const auditLog = await j<any[]>('/audit');
-check(['credito.desembolso', 'pago', 'productor.alta', 'credito.cancelado', 'credito.ajuste', 'precio.del_dia', 'precio.modificado_en_pago'].every((a) => auditLog.some((x) => x.action === a)), 'bitácora de auditoría');
+check(['pago', 'productor.alta', 'credito.cancelado', 'credito.ajuste', 'precio.del_dia', 'precio.modificado_en_pago'].every((a) => auditLog.some((x) => x.action === a)), 'bitácora de auditoría');
 await xsd('/statement', 'camt.053.001.08');
 
 console.log(failures ? `\n${failures} verificaciones fallaron` : '\nTodo en orden');

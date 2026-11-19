@@ -1,4 +1,4 @@
-import { PGlite } from '@electric-sql/pglite';
+import { PGlite, type Transaction } from '@electric-sql/pglite';
 import { mkdirSync } from 'node:fs';
 
 /**
@@ -6,6 +6,10 @@ import { mkdirSync } from 'node:fs';
  * The SQL is plain Postgres so the same schema runs on the shared AWS instance later.
  */
 export type Db = PGlite;
+/** The database or an open transaction: anything that runs a query. */
+export type Queryable = Db | Transaction;
+
+export const SCHEMA_VERSION = 2;
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS cooperatives (
@@ -91,9 +95,14 @@ CREATE TABLE IF NOT EXISTS credits (
   created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE SEQUENCE IF NOT EXISTS delivery_ref_seq;
+
 CREATE TABLE IF NOT EXISTS deliveries (
   id          SERIAL PRIMARY KEY,
   reference   VARCHAR(20) NOT NULL UNIQUE,
+  -- Idempotency key sent by the scale, and the SHA-256 of the request it came with.
+  client_ref     UUID UNIQUE,
+  request_sha256 CHAR(64),
   producer_id INT NOT NULL REFERENCES producers(id),
   product_id  INT NOT NULL REFERENCES products(id),
   quantity    NUMERIC(12,2) NOT NULL,
@@ -103,21 +112,37 @@ CREATE TABLE IF NOT EXISTS deliveries (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- One row per attempt to pay a set of settlements. Everything needed to reconcile
+-- the attempt and rebuild its documents is stored before the envelope leaves the
+-- process (see PLAN_PAGOS_SIN_CONFIRMAR, internal plan v0.4).
+--   prepared → submitting → settled | unconfirmed → settled | failed_onchain | needs_review
+--   prepared → not_executed (the envelope never left the process)
 CREATE TABLE IF NOT EXISTS payment_runs (
-  id             SERIAL PRIMARY KEY,
-  cooperative_id INT NOT NULL REFERENCES cooperatives(id),
-  msg_id         VARCHAR(35) NOT NULL UNIQUE,
-  pmt_inf_id     VARCHAR(35) NOT NULL UNIQUE,
-  status         VARCHAR(12) NOT NULL DEFAULT 'draft',
-  pain001        TEXT,
-  pain001_sha256 CHAR(64),
-  pain002        TEXT,
-  tx_hash        CHAR(64),
-  result_code    TEXT,
+  id                  SERIAL PRIMARY KEY,
+  cooperative_id      INT NOT NULL REFERENCES cooperatives(id),
+  msg_id              VARCHAR(35) NOT NULL UNIQUE,
+  pmt_inf_id          VARCHAR(35) NOT NULL UNIQUE,
+  status              VARCHAR(20) NOT NULL,
+  pain001             TEXT NOT NULL,
+  pain001_sha256      CHAR(64) NOT NULL,
+  pain002             TEXT,
+  tx_hash             CHAR(64) NOT NULL UNIQUE,
+  result_code         TEXT,
   -- MXN per 1 unit of the settlement token (USDC) used for the whole run.
-  fx_rate        NUMERIC(14,6),
-  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  settled_at     TIMESTAMPTZ
+  fx_rate             NUMERIC(14,6) NOT NULL,
+  source_account      VARCHAR(56) NOT NULL,
+  tx_sequence         TEXT NOT NULL,
+  max_time            TIMESTAMPTZ NOT NULL,
+  network_passphrase  TEXT NOT NULL,
+  ledger_at_build_seq INT NOT NULL,
+  envelope_xdr        TEXT NOT NULL,
+  signed_envelope_xdr TEXT,
+  -- Immutable snapshot of the attempt: parties, amounts, documents, credit repayments.
+  run_payload         JSONB NOT NULL,
+  ledger              INT,
+  checked_at          TIMESTAMPTZ,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  settled_at          TIMESTAMPTZ
 );
 
 CREATE TABLE IF NOT EXISTS settlements (
@@ -137,7 +162,9 @@ CREATE TABLE IF NOT EXISTS settlements (
   uetr             UUID,
   -- What actually moved on Stellar: the MXN net converted at the run's rate.
   token_amount     NUMERIC(20,5),
-  camt054          TEXT
+  camt054          TEXT,
+  -- The calculation returned to the scale, so a replayed request answers with it.
+  preview          JSONB
 );
 
 CREATE TABLE IF NOT EXISTS credit_movements (
@@ -151,6 +178,13 @@ CREATE TABLE IF NOT EXISTS credit_movements (
   settlement_id INT REFERENCES settlements(id),
   tx_hash       CHAR(64),
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Written only by the seed when it initialises a clean database. The API refuses
+-- to start without it, so data from before the unconfirmed-payments fix is never reused.
+CREATE TABLE IF NOT EXISTS schema_cut (
+  version    INT PRIMARY KEY,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS audit_log (
@@ -168,6 +202,14 @@ export async function openDb(dataDir?: string): Promise<Db> {
   return db;
 }
 
-export async function audit(db: Db, action: string, details: Record<string, unknown> = {}): Promise<void> {
+export async function hasSchemaCut(db: Db): Promise<boolean> {
+  return (await db.query(`SELECT 1 FROM schema_cut WHERE version = $1`, [SCHEMA_VERSION])).rows.length > 0;
+}
+
+export async function markSchemaCut(db: Db): Promise<void> {
+  await db.query(`INSERT INTO schema_cut (version) VALUES ($1) ON CONFLICT DO NOTHING`, [SCHEMA_VERSION]);
+}
+
+export async function audit(db: Queryable, action: string, details: Record<string, unknown> = {}): Promise<void> {
   await db.query(`INSERT INTO audit_log (action, details) VALUES ($1, $2)`, [action, JSON.stringify(details)]);
 }

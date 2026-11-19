@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import type { Asset } from '@stellar/stellar-sdk';
 import { audit, type Db } from './db.js';
 import { toToken, usdcMxnRate } from './fx.js';
-import { buildPaymentTransaction, submit, type Signer } from './stellar.js';
+import { buildPaymentTransaction, HorizonChain, type Signer } from './stellar.js';
 
 /* ── Pure terms math ───────────────────────────────────────────────────── */
 
@@ -82,7 +82,13 @@ export async function createCredit(db: Db, c: NewCredit): Promise<{ id: number; 
  * Disbursement: the lender pays the producer on Stellar. The memo is the
  * SHA-256 of the canonical terms, so the contract the producer accepted is
  * anchored next to the money it describes.
+ *
+ * DISABLED: an unconfirmed submission would leave the credit `pendiente` and
+ * allow a second disbursement. The route and the seed do not call this until it
+ * gets the same durable-attempt treatment as payment runs.
  */
+export const DISBURSEMENT_DISABLED = 'El desembolso está desactivado mientras se corrige el manejo de envíos sin confirmar';
+
 export async function disburseCredit(db: Db, id: number, deps: { asset: Asset; signerFor: (lenderAddress: string) => Signer | null }) {
   const c = (await db.query<{ reference: string; status: string; principal: string; total_due: string; terms_sha256: string; producer_address: string; lender_address: string }>(
     `SELECT c.reference, c.status, c.principal::text, c.total_due::text, c.terms_sha256, p.stellar_address AS producer_address, l.stellar_address AS lender_address
@@ -96,12 +102,15 @@ export async function disburseCredit(db: Db, id: number, deps: { asset: Asset; s
   // The loan is in MXN; the lender sends its USDC equivalent at today's rate.
   const { rate } = await usdcMxnRate();
   const tokenAmount = toToken(c.principal, rate);
-  const tx = await buildPaymentTransaction({
-    source: c.lender_address, asset: deps.asset, memoSha256: c.terms_sha256,
+  const chain = new HorizonChain();
+  const tx = buildPaymentTransaction({
+    account: await chain.loadAccount(c.lender_address), asset: deps.asset, memoSha256: c.terms_sha256,
     payments: [{ destination: c.producer_address, amount: tokenAmount }],
   });
-  const result = await submit(await signer.sign(tx));
-  if (!result.successful) throw new Error(`Stellar rechazó el desembolso (${result.code})`);
+  const result = await chain.submit(await signer.sign(tx));
+  if (result.kind !== 'success') {
+    throw new Error(`El desembolso quedó sin confirmar (${result.code ?? 'sin código'}); revisa ${tx.hash().toString('hex')} antes de repetirlo`);
+  }
 
   await db.query(`UPDATE credits SET status = 'vigente', disbursement_tx = $1, disbursed_at = NOW() WHERE id = $2`, [result.hash, id]);
   await db.query(`INSERT INTO credit_movements (credit_id, kind, amount, balance_after, tx_hash, token_amount, fx_rate) VALUES ($1, 'desembolso', $2, $3, $4, $5, $6)`,

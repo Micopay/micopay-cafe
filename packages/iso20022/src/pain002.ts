@@ -29,9 +29,9 @@ export interface StatusReport {
 }
 
 /**
- * Maps a Stellar submission result to an ISO status.
- * Horizon only returns success for applied transactions; any tx_/op_ error code
- * means the transaction never changed balances.
+ * Maps a Stellar result to an ISO status. Only pass a result that is proven
+ * (the transaction record on the ledger): a submission error code alone does
+ * not prove that no money moved, so the API reports those attempts as PDNG.
  */
 export function statusFromStellar(result: { successful: boolean; code?: string } | null): TxStatus {
   if (!result) return 'PDNG';

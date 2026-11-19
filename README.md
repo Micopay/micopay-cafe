@@ -29,7 +29,7 @@ Two areas, mirroring the original desktop apps (operator + admin) of [coffee-pay
 |---|---|
 | **Realizar pago** | Pay at the scale: pick the producer, weigh, the daily price loads by default (overrides are audited), optional quality readings apply tiered deductions, confirm — the producer is paid **immediately** in one Stellar transaction |
 | **Productores** | Search, sign-up (validates the Stellar address and whether the account can receive MXNe), profile with delivery history and credits |
-| **Historial** | Filters by date, status and producer; payment detail with the ISO 20022 documents, retry of rejected payments, CSV export, producer receipt |
+| **Historial** | Filters by date, status and producer; payment detail with the ISO 20022 documents, retry only when it is proven the payment did not happen, CSV export, producer receipt |
 
 **Administration**
 | Screen | What happens |
@@ -43,12 +43,24 @@ Two areas, mirroring the original desktop apps (operator + admin) of [coffee-pay
 ### Crop-loan lifecycle
 
 1. **Grant** — producer, lender, purpose, principal, annual rate, term, repayment % per delivery, due date. Interest is fixed at origination; the loan is *pendiente*.
-2. **Disburse** — the lender pays the producer on Stellar. The memo is the **SHA-256 of the canonical loan terms** (downloadable as JSON), so the contract is anchored next to the money. Status: *vigente*.
+2. **Disburse** — the lender pays the producer on Stellar. The memo is the **SHA-256 of the canonical loan terms** (downloadable as JSON), so the contract is anchored next to the money. Status: *vigente*. **Disabled for now:** an unconfirmed disbursement could be sent twice, so the route answers 503 and the seed leaves every loan *pendiente* until disbursement gets the same treatment as payments (below).
 3. **Repay with the harvest** — each payment deducts the repayment and sends it to the lender **in the same atomic transaction** that pays the producer. Every repayment is a movement with its transaction hash.
 4. **Administer** — pause/resume the automatic deduction, change the repayment %, cancel before disbursement. *Vencido* is derived when the due date passes with balance; *pagado* when the balance reaches zero.
 
 ### Every payment, end to end
 `kilos × price − quality deduction − loan repayment` → **pain.001** with kilos, price, deductions and repayment in structured remittance → its SHA-256 becomes the memo of **one Stellar transaction** (producer + lender, all or nothing) → **pain.002** status → **camt.054** receipt for the producer → **camt.053** statement with balances reconstructed from Horizon.
+
+### Payments that never pay twice
+
+A payment is retried **only when it is proven it did not happen**. A network failure while sending can leave a payment on the ledger even though the answer never arrived, so the API never reads "no answer" or an error code as "no money moved".
+
+- Before the transaction leaves the API, the attempt is stored with its hash, envelope, expiry and an immutable snapshot of everything its documents need. The delivery, its settlement and the attempt are created in one database transaction.
+- Only two proofs settle an attempt: Horizon returns the transaction record (successful → **paid**; failed → **can be retried**), or the envelope never left the process (local signing failed, or the API stopped before sending).
+- Anything else is **unconfirmed**. A background pass looks the hash up every minute; if the transaction never shows up after it expires, the attempt moves to **needs review** and stays blocked — the public Horizon cannot prove absence. `npm run review:run -w apps/api -- <runId>` (with the API stopped) looks it up again and closes it only on evidence.
+- One open attempt per producer. A scale that sends a `clientRef` (UUID) gets the stored payment back when it repeats the request, even after a reload; without it, only the one-open-attempt rule protects against a resend.
+- Signing from the MicoPay app is disabled for payments until its contract returns the signed envelope (the API answers 503 when it is configured).
+
+API fields: `status` (`settled`, `unconfirmed`, `failed_onchain`, `not_executed`, `needs_review`), `paymentState` and `retryAllowed` on every payment; `GET /api/payments/by-ref/:clientRef`.
 
 ### Why Stellar
 
@@ -74,7 +86,7 @@ It is the language banks, ERPs, auditors and development lenders (FIRA, IFNBs) a
 
 - **Generic products:** coffee cherry (freshly picked; no standard deductions — the price is negotiated at the scale), parchment coffee and cocoa are configured as data (unit, quality attributes, deduction tiers). Adding honey or milk needs no code.
 - **Credit:** the loan contract is private (database); disbursement, repayments and the evidence hash are on-chain.
-- **Signing:** the demo signs with a local testnet key. In production the cooperative signs from the **MicoPay app** via the existing `/sign-requests` endpoint of the MicoPay backend — no private key ever touches the platform.
+- **Signing:** the demo signs with a local testnet key. The plan is for the cooperative to sign from the **MicoPay app** via the `/sign-requests` endpoint of the MicoPay backend, so no private key touches the platform; it is disabled for payments until that endpoint returns the signed envelope.
 
 ## Run it locally
 
@@ -82,23 +94,25 @@ Requirements: Node 22+. No database to install (PGlite runs Postgres in-process)
 
 ```bash
 npm install
-npm run seed -w apps/api   # creates testnet accounts, issues demo MXNe, loads a cooperative, 3 producers and a loan
+npm run seed -w apps/api   # creates testnet accounts, funds demo USDC, loads a cooperative, producers and two pending loans
 npm run dev:api            # http://127.0.0.1:8787
 npm run dev:web            # http://localhost:5180
 ```
 
-Then: **Realizar pago** → pick Pedro Martínez → *Café cereza* is preselected at the demo price → weigh 600 kg → **Ejecutar pago**. Pick Juan Pérez (he has a disbursed loan) to see the repayment deducted in the same transaction. Open the transaction on stellar.expert and the ISO documents under **Historial**; follow the loan under **Créditos** (María's is pending: disburse it from there).
+Then: **Realizar pago** → pick Pedro Martínez → *Café cereza* is preselected at the demo price → weigh 600 kg → **Ejecutar pago**. Open the transaction on stellar.expert and the ISO documents under **Historial**; the loans under **Créditos** stay pending while disbursement is disabled.
 
 ```bash
 npm test                   # ISO 20022 messages vs official XSDs + settlement math
-npx tsx apps/api/test/e2e.ts   # 28 end-to-end checks against testnet (API must be running, fresh seed)
+npx tsx apps/api/test/e2e.ts   # 30 end-to-end checks against testnet (API must be running, fresh seed)
 ```
 
-Testnet keys are written to `data/testnet-keys.json`, which is git-ignored. Testnet only — never real funds.
+Testnet keys are written to `data/testnet-keys.json`, which is git-ignored. Testnet only — never real funds. `CAFE_DATA_DIR` moves the database and keys elsewhere.
+
+The API only starts on a database the seed created with the current schema (a "schema cut" row), and only one process (API, seed or review command) uses a data directory at a time. To start clean next to an old demo: stop the API, archive the whole data directory (keys included), then run the seed with `CAFE_DATA_DIR` pointing at a new, empty directory. `npm run audit:legacy -w apps/api -- <copy of the old pg directory>` reports, read-only, what Horizon shows for each old run.
 
 ## Status and roadmap
 
-Working today on testnet: pay at the scale, producers, daily price, quality deductions, crop-loan administration (grant, anchored disbursement, automatic repayment, pause, cancel), ISO 20022 messages, receipts, monthly summary, audit log, day close and exports.
+Working today on testnet: pay at the scale with unconfirmed-payment protection, producers, daily price, quality deductions, crop-loan administration (grant, pause, cancel; disbursement disabled), ISO 20022 messages, receipts, monthly summary, audit log, day close and exports.
 
 Next:
 1. Sign-in and signing with the MicoPay app (`/sign-requests`), replacing the local demo signer.

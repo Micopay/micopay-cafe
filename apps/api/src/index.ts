@@ -2,34 +2,39 @@ import cors from '@fastify/cors';
 import { Keypair } from '@stellar/stellar-sdk';
 import Big from 'big.js';
 import Fastify, { type FastifyReply } from 'fastify';
-import { loadKeys, PG_DIR, settlementAsset, TOKEN_CCY } from './config.js';
-import { cancelCredit, createCredit, disburseCredit, STATUS_SQL, updateCredit, type NewCredit } from './credits.js';
-import { audit, openDb } from './db.js';
+import { createHash } from 'node:crypto';
+import { acquireDataLock, DATA_DIR, loadKeys, PG_DIR, settlementAsset, TOKEN_CCY } from './config.js';
+import { cancelCredit, createCredit, DISBURSEMENT_DISABLED, STATUS_SQL, updateCredit, type NewCredit } from './credits.js';
+import { audit, hasSchemaCut, openDb } from './db.js';
 import { toMxn, usdcMxnRate } from './fx.js';
 import { createTestnetAccount } from './testnet.js';
-import { executeRun } from './runs.js';
+import { createPaymentEngine, HttpError, PAYMENT_STATE_SQL, RETRY_ALLOWED_SQL } from './runs.js';
 import { settle, type DeductionRule } from './settlement.js';
 import { buildStatement } from './statement.js';
-import { accountStatus, assetBalance, explorerTx, isStellarAddress, LocalSigner, MicopaySigner, type Signer } from './stellar.js';
+import { accountStatus, assetBalance, explorerTx, HorizonChain, isStellarAddress, LocalSigner, MicopaySigner, type Signer } from './stellar.js';
 
 const keys = loadKeys();
 const asset = settlementAsset(keys);
 const NETWORK = 'TESTNET' as const;
 /** Mexico City has no DST since 2022: business days are UTC-6. */
 const TZ_OFFSET = '-06:00';
+const releaseDataLock = acquireDataLock('la API');
 const db = await openDb(PG_DIR);
+if (!(await hasSchemaCut(db))) {
+  await db.close();
+  releaseDataLock();
+  throw new Error(`La base en ${PG_DIR} no tiene la marca de corte de este esquema. Archiva ${DATA_DIR} y corre el seed sobre un directorio nuevo (CAFE_DATA_DIR).`);
+}
 
 // MICOPAY_API + MICOPAY_DEVICE_KEY + MICOPAY_IDENTIFIER switch signing to the MicoPay app.
 const coopSigner: Signer = process.env.MICOPAY_DEVICE_KEY && process.env.MICOPAY_API && process.env.MICOPAY_IDENTIFIER
   ? new MicopaySigner({ apiUrl: process.env.MICOPAY_API, deviceKey: process.env.MICOPAY_DEVICE_KEY, identifier: process.env.MICOPAY_IDENTIFIER })
   : new LocalSigner(Keypair.fromSecret(keys.cooperative));
 
+const payments = createPaymentEngine({ db, chain: new HorizonChain(), signer: coopSigner, asset, network: NETWORK });
+
 /** Demo lenders sign with testnet keys held locally; any other lender would sign from its MicoPay app. */
 const lenderKeys = new Map([keys.lender, ...(keys.extraLenders ?? [])].map((s) => [Keypair.fromSecret(s).publicKey(), Keypair.fromSecret(s)]));
-const lenderSigner = (address: string): Signer | null => {
-  const kp = lenderKeys.get(address);
-  return kp ? new LocalSigner(kp) : null;
-};
 
 const app = Fastify({ logger: { level: 'warn' } });
 await app.register(cors, { origin: true });
@@ -187,11 +192,21 @@ app.post('/api/testnet/account', async () => createTestnetAccount(asset));
 
 /* ── pay at the scale ──────────────────────────────────────────────────── */
 
-interface PaymentBody { producerId: number; productId: number; quantity: string; quality?: Record<string, number>; unitPrice?: string; lot?: string; notes?: string }
+interface PaymentBody { producerId: number; productId: number; quantity: string; quality?: Record<string, number>; unitPrice?: string; lot?: string; notes?: string; clientRef?: string }
+const UUID = { type: 'string', pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$' };
 const paymentSchema = { body: { type: 'object', required: ['producerId', 'productId', 'quantity'], additionalProperties: false, properties: {
   producerId: { type: 'integer' }, productId: { type: 'integer' }, quantity: MONEY,
   quality: { type: 'object', additionalProperties: { type: 'number' } }, unitPrice: MONEY,
-  lot: { type: 'string', maxLength: 35 }, notes: { type: 'string', maxLength: 500 } } } };
+  lot: { type: 'string', maxLength: 35 }, notes: { type: 'string', maxLength: 500 }, clientRef: UUID } } };
+
+/** SHA-256 of the request with sorted keys and without clientRef: a replay must carry the same content. */
+export function requestSha256(body: PaymentBody): string {
+  const { clientRef: _ref, ...rest } = body;
+  const sorted = (v: unknown): unknown => v && typeof v === 'object' && !Array.isArray(v)
+    ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => a.localeCompare(b)).map(([k, x]) => [k, sorted(x)]))
+    : v;
+  return createHash('sha256').update(JSON.stringify(sorted({ quality: {}, ...rest }))).digest('hex');
+}
 
 app.post<{ Body: PaymentBody }>('/api/payments/preview', { schema: paymentSchema }, async (req) => {
   const inputs = await settlementInputs(req.body.producerId, req.body.productId, req.body.unitPrice);
@@ -199,9 +214,19 @@ app.post<{ Body: PaymentBody }>('/api/payments/preview', { schema: paymentSchema
     ...settle({ ...inputs, quantity: req.body.quantity, quality: req.body.quality ?? {} }) };
 });
 
-/** Records the delivery and pays it immediately, like the original app: weigh, confirm, pay. */
+/**
+ * Records the delivery and pays it immediately, like the original app: weigh, confirm, pay.
+ * With clientRef, repeating the request returns the stored payment instead of paying again;
+ * without it, only the one-open-payment-per-producer rule protects against a resend.
+ */
 app.post<{ Body: PaymentBody }>('/api/payments', { schema: paymentSchema }, async (req) => {
-  const { producerId, productId, quantity, quality = {}, unitPrice, lot, notes } = req.body;
+  const { producerId, productId, quantity, quality = {}, unitPrice, lot, notes, clientRef } = req.body;
+  const sha = clientRef ? requestSha256(req.body) : undefined;
+  // A known clientRef is answered before any call to Horizon, so recovery works while it is down.
+  if (clientRef) {
+    const replayed = await payments.lookupRef(clientRef, sha);
+    if (replayed) return replayed;
+  }
   const producer = (await db.query<{ is_active: boolean; stellar_address: string }>(`SELECT is_active, stellar_address FROM producers WHERE id = $1`, [producerId])).rows[0];
   if (!producer?.is_active) throw new Error('el productor no existe o está inactivo');
   const status = await accountStatus(producer.stellar_address, asset);
@@ -209,28 +234,29 @@ app.post<{ Body: PaymentBody }>('/api/payments', { schema: paymentSchema }, asyn
 
   const inputs = await settlementInputs(producerId, productId, unitPrice);
   const result = settle({ ...inputs, quantity, quality });
-  const n = (await db.query<{ n: number }>(`SELECT COUNT(*)::int + 1 AS n FROM deliveries`)).rows[0]!.n;
-  const reference = `ENT-${new Date().getFullYear()}-${String(n).padStart(6, '0')}`;
-  const delivery = (await db.query<{ id: number }>(
-    `INSERT INTO deliveries (reference, producer_id, product_id, quantity, quality, lot, notes) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
-    [reference, producerId, productId, quantity, JSON.stringify(quality), lot || null, notes || null],
-  )).rows[0]!;
-  const s = (await db.query<{ id: number }>(
-    `INSERT INTO settlements (delivery_id, unit_price, gross, deductions, credit_id, credit_repayment, net) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
-    [delivery.id, inputs.unitPrice, result.gross, JSON.stringify(result.deductions), result.creditId, result.creditRepayment, result.net],
-  )).rows[0]!;
-  if (unitPrice && unitPrice !== inputs.dailyPrice) await audit(db, 'precio.modificado_en_pago', { reference, dailyPrice: inputs.dailyPrice, used: unitPrice });
-
-  const outcome = await executeRun(db, { settlementIds: [s.id], signer: coopSigner, asset, network: NETWORK });
-  const paid = (await db.query<{ token_amount: string | null }>(`SELECT token_amount::text FROM settlements WHERE id = $1`, [s.id])).rows[0];
-  return { ...outcome, settlementId: s.id, reference, ...result, tokenAmount: paid?.token_amount ?? null, asset: asset.getCode(), explorer: explorerTx(outcome.txHash) };
+  const outcome = await payments.createAndPay({
+    producerId, productId, quantity, quality, lot, notes, clientRef, requestSha256: sha,
+    calc: { ...result, unitPrice: inputs.unitPrice },
+    preview: { ...result, unitPrice: inputs.unitPrice, dailyPrice: inputs.dailyPrice, credit: inputs.credit },
+  });
+  if (unitPrice && unitPrice !== inputs.dailyPrice && !outcome.replayed) {
+    await audit(db, 'precio.modificado_en_pago', { reference: outcome.reference, dailyPrice: inputs.dailyPrice, used: unitPrice });
+  }
+  return outcome;
 });
 
-/** Retry a payment whose transaction the ledger rejected (the settlement stays pending). */
-app.post<{ Params: { id: string } }>('/api/payments/:id/retry', async (req) => {
-  const outcome = await executeRun(db, { settlementIds: [Number(req.params.id)], signer: coopSigner, asset, network: NETWORK });
-  return { ...outcome, explorer: explorerTx(outcome.txHash) };
+/** The payment stored under a scale reference, e.g. after the page reloads mid-payment. */
+app.get<{ Params: { clientRef: string } }>('/api/payments/by-ref/:clientRef', async (req, reply) => {
+  const found = (await db.query<{ id: number }>(
+    `SELECT s.id FROM deliveries d JOIN settlements s ON s.delivery_id = d.id WHERE d.client_ref::text = lower($1)`, [req.params.clientRef],
+  )).rows[0];
+  if (!found) return reply.status(404).send({ error: 'no existe' });
+  await payments.refresh(found.id);
+  return payments.view(found.id);
 });
+
+/** Pays again only when the last attempt is proven not to have paid (failed on the ledger, or never sent). */
+app.post<{ Params: { id: string } }>('/api/payments/:id/retry', async (req) => payments.retry(Number(req.params.id)));
 
 const PAYMENT_SELECT = `
   SELECT s.id, s.status, d.reference, d.lot, d.notes, d.quantity::text, d.quality, d.created_at, pr.name AS product, pr.unit,
@@ -238,7 +264,8 @@ const PAYMENT_SELECT = `
          c.reference AS credit_ref, c.outstanding::text AS credit_outstanding,
          p.id AS producer_id, p.name AS producer, p.community, p.stellar_address,
          s.run_id, r.msg_id, s.end_to_end_id, s.uetr::text, r.tx_hash, r.settled_at, r.pain001_sha256, r.result_code,
-         s.token_amount::text, r.fx_rate::text
+         s.token_amount::text, r.fx_rate::text, r.status AS run_status,
+         ${PAYMENT_STATE_SQL} AS "paymentState", ${RETRY_ALLOWED_SQL} AS "retryAllowed"
     FROM settlements s JOIN deliveries d ON d.id = s.delivery_id JOIN products pr ON pr.id = d.product_id
     JOIN producers p ON p.id = d.producer_id LEFT JOIN credits c ON c.id = s.credit_id LEFT JOIN payment_runs r ON r.id = s.run_id`;
 
@@ -268,6 +295,7 @@ app.get<{ Querystring: PaymentFilters }>('/api/payments.csv', async (req, reply)
 });
 
 app.get<{ Params: { id: string } }>('/api/payments/:id', async (req, reply) => {
+  await payments.refresh(Number(req.params.id));
   const row = (await db.query<{ tx_hash: string | null }>(`${PAYMENT_SELECT} WHERE s.id = $1`, [Number(req.params.id)])).rows[0];
   if (!row) return reply.status(404).send({ error: 'no existe' });
   return { ...row, explorer: row.tx_hash ? explorerTx(row.tx_hash) : null };
@@ -361,9 +389,8 @@ app.post<{ Body: NewCredit }>('/api/credits', {
       principal: MONEY, annualRate: MONEY, termMonths: { type: 'integer' }, repaymentPercent: MONEY, dueDate: DATE } } },
 }, async (req) => createCredit(db, req.body));
 
-app.post<{ Params: { id: string } }>('/api/credits/:id/disburse', async (req) => {
-  const r = await disburseCredit(db, Number(req.params.id), { asset, signerFor: lenderSigner });
-  return { ...r, explorer: explorerTx(r.txHash) };
+app.post<{ Params: { id: string } }>('/api/credits/:id/disburse', async () => {
+  throw new HttpError(503, DISBURSEMENT_DISABLED);
 });
 
 app.post<{ Params: { id: string } }>('/api/credits/:id/cancel', async (req) => {
@@ -418,11 +445,17 @@ app.get('/api/health', async () => ({ ok: true, signer: coopSigner.kind, network
 // PGlite writes to disk on close: an abrupt exit can leave the data directory unusable.
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.once(signal, async () => {
+    clearInterval(reconciler);
     await app.close();
     await db.close();
+    releaseDataLock();
     process.exit(0);
   });
 }
+
+// Recovery finishes before the periodic pass starts and before any request is accepted.
+await payments.recover();
+const reconciler = setInterval(() => void payments.tick().catch((err) => console.warn('reconciliación', err)), 60_000);
 
 const port = Number(process.env.PORT ?? 8787);
 await app.listen({ port, host: '127.0.0.1' });

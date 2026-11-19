@@ -5,20 +5,24 @@
  *    working capital to the buyer and a loan fund to the lender, minted with the
  *    issuer key of the MicoPay USDC rehearsal (~/.micopay/ensayo-usdc.json)
  *  - loads cooperative, lender, producers, products, daily prices and quality rules
- *  - grants and disburses one crop loan through the real flow (terms anchored on Stellar)
- *    and leaves a second one pending so the admin flow can be shown
+ *  - grants two crop loans and leaves them pending: disbursement is disabled until
+ *    it handles unconfirmed submissions like payment runs do, so no credit is vigente
+ *    and payments make no automatic repayments
+ *  - marks the database as a clean cut of the current schema, which the API requires
  *
- * Testnet only. Keys are written to data/testnet-keys.json (git-ignored).
+ * Testnet only. Keys are written to data/testnet-keys.json (git-ignored), or under
+ * CAFE_DATA_DIR. The seed wipes that database: point CAFE_DATA_DIR at a new
+ * directory to keep an archived demo intact.
  */
 import { Asset, Keypair, Operation, TransactionBuilder } from '@stellar/stellar-sdk';
 import { readFileSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { DATA_DIR, PG_DIR, saveKeys, type TestnetKeys } from './config.js';
-import { createCredit, disburseCredit } from './credits.js';
-import { audit, openDb } from './db.js';
+import { acquireDataLock, DATA_DIR, PG_DIR, saveKeys, type TestnetKeys } from './config.js';
+import { createCredit } from './credits.js';
+import { audit, markSchemaCut, openDb } from './db.js';
 import { addCafeCereza } from './products.js';
-import { horizon, LocalSigner, NETWORK_PASSPHRASE } from './stellar.js';
+import { horizon, NETWORK_PASSPHRASE } from './stellar.js';
 import { friendbot } from './testnet.js';
 
 // Demo people and places: coffee towns around Xico, Veracruz.
@@ -36,6 +40,7 @@ function usdcIssuer(): Keypair {
 }
 
 async function main() {
+  const releaseDataLock = acquireDataLock('el seed');
   rmSync(PG_DIR, { recursive: true, force: true });
 
   const issuer = usdcIssuer();
@@ -67,6 +72,7 @@ async function main() {
   saveKeys(keys);
 
   const db = await openDb(PG_DIR);
+  await markSchemaCut(db);
   await db.query(`INSERT INTO cooperatives (name, account_id, stellar_address) VALUES ($1, 'COOP-0001', $2)`,
     ['Compradora de Café La Cumbre', coop.publicKey()]);
   await db.query(`INSERT INTO lenders (name, kind, account_id, stellar_address) VALUES ($1, 'IFNB', 'LEND-0001', $2)`,
@@ -99,14 +105,14 @@ async function main() {
     producerId: 1, lenderId: 1, purpose: 'Avío: fertilizante y jornales', principal: '12000',
     annualRate: '8.5', termMonths: 6, repaymentPercent: '25', dueDate,
   });
-  const d = await disburseCredit(db, juan.id, { asset, signerFor: () => new LocalSigner(lender) });
-  console.log(`Crédito ${juan.reference} desembolsado a Juan: ${d.txHash}`);
+  console.log(`Crédito ${juan.reference} de Juan queda pendiente (el desembolso está desactivado)`);
   const maria = await createCredit(db, {
     producerId: 2, lenderId: 1, purpose: 'Renovación de cafetal (plántula)', principal: '12000',
     annualRate: '8.5', termMonths: 12, repaymentPercent: '20', dueDate,
   });
   console.log(`Crédito ${maria.reference} de María queda pendiente de desembolso`);
   await db.close();
+  releaseDataLock();
 
   console.log(`\nListo. Compradora: ${coop.publicKey()}\nDatos en ${DATA_DIR}`);
 }

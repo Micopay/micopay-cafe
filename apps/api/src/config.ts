@@ -1,10 +1,41 @@
 import { Asset, Keypair } from '@stellar/stellar-sdk';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const DATA_DIR = fileURLToPath(new URL('../../../data/', import.meta.url));
+/** CAFE_DATA_DIR moves the database and keys, e.g. to start a clean demo next to an archived one. */
+export const DATA_DIR = process.env.CAFE_DATA_DIR
+  ? join(process.env.CAFE_DATA_DIR, '/')
+  : fileURLToPath(new URL('../../../data/', import.meta.url));
 export const KEYS_FILE = `${DATA_DIR}testnet-keys.json`;
 export const PG_DIR = `${DATA_DIR}pg`;
+const LOCK_FILE = `${DATA_DIR}api.lock`;
+
+function alive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code === 'EPERM';
+  }
+}
+
+/**
+ * Exclusive use of the data directory: the API and the review command never run
+ * at the same time, because the in-memory payment locks live in one process.
+ * A lock left by a process that no longer exists is taken over.
+ */
+export function acquireDataLock(owner: string): () => void {
+  mkdirSync(DATA_DIR, { recursive: true });
+  if (existsSync(LOCK_FILE)) {
+    const held = JSON.parse(readFileSync(LOCK_FILE, 'utf8')) as { pid: number; owner: string };
+    if (held.pid !== process.pid && alive(held.pid)) {
+      throw new Error(`${DATA_DIR} está en uso por ${held.owner} (pid ${held.pid}); detenlo primero`);
+    }
+  }
+  writeFileSync(LOCK_FILE, JSON.stringify({ pid: process.pid, owner }));
+  return () => rmSync(LOCK_FILE, { force: true });
+}
 
 /** Testnet-only keys written by the seed script. Never real funds. */
 export interface TestnetKeys {
