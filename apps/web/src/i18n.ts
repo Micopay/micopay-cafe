@@ -127,6 +127,12 @@ const EN: Record<string, string> = {
   'Liquidado en Stellar: {amount} {asset}': 'Settled on Stellar: {amount} {asset}',
   'Liquidado en Stellar': 'Settled on Stellar',
   'Tipo de cambio': 'Exchange rate',
+  'Activo de liquidación no informado': 'Settlement asset not reported',
+  'Tipo de cambio USD/MXN de referencia': 'USD/MXN reference exchange rate',
+  'Activo de liquidación configurado no disponible': 'Configured settlement asset unavailable',
+  'Línea de confianza (trustline) requerida para {code}': 'Trustline required for {code}',
+  'Emisor: {issuer} · Red: {network}': 'Issuer: {issuer} · Network: {network}',
+  'Saldo en {code} · testnet': 'Balance in {code} · testnet',
 
   // producers
   'Socios': 'Members',

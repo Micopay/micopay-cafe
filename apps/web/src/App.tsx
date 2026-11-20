@@ -67,6 +67,9 @@ function Grupo({ titulo, items }: { titulo: string; items: typeof OPERACION }) {
 
 function Encabezado() {
   const s = useData(api.summary);
+  const asset = s.data?.asset;
+  // The MXN equivalent is only shown when the API supports a conversion for the configured asset.
+  const mxnValida = !!asset && asset.code === 'MXNe' && !!s.data?.balanceMxn;
   return (
     <div className="mb-7 flex flex-wrap items-center justify-between gap-3 border-b-2 border-tinta pb-4">
       <div>
@@ -75,13 +78,21 @@ function Encabezado() {
       </div>
       <div className="flex items-center gap-4">
         <div className="text-right">
-          <div className="text-[11px] font-bold uppercase tracking-[.14em] text-gris">{t('Saldo en pesos · testnet')}</div>
-          <div className="num font-display text-[22px] font-extrabold text-verde leading-tight">{s.data?.balanceMxn ? mxn(s.data.balanceMxn) : '—'}</div>
-          {s.data?.balance && s.data.fx && (
-            <div className="num text-[12px] text-gris">{token(s.data.balance)} {s.data.asset.code} · 1 USD = {Number(s.data.fx.rate).toFixed(2)} MXN</div>
+          <div className="text-[11px] font-bold uppercase tracking-[.14em] text-gris">{t('Saldo · testnet')}</div>
+          {s.data?.balance && asset ? (
+            <>
+              <div className="num font-display text-[22px] font-extrabold text-verde leading-tight">{token(s.data.balance)} {asset.code}</div>
+              <div className="num text-[12px] text-gris">{t('Emisor {issuer} · red {network}', { issuer: short(asset.issuer, 8), network: asset.network })}</div>
+            </>
+          ) : (
+            <div className="num font-display text-[22px] font-extrabold text-verde leading-tight">{'—'}</div>
+          )}
+          {mxnValida && <div className="num text-[12px] text-gris">{t('Equivalente {mxn}', { mxn: mxn(s.data!.balanceMxn!) })}</div>}
+          {s.data?.fx && (
+            <div className="num text-[12px] text-gris">{t('Referencia USD/MXN: 1 USD = {rate} MXN', { rate: Number(s.data.fx.rate).toFixed(2) })}</div>
           )}
         </div>
-        <button type="button" onClick={s.reload} aria-label={t('Actualizar saldo')} className="rounded-sm border-2 border-tinta bg-papel p-2"><Icon name="history_toggle_off" /></button>
+        <button type="button" onClick={s.reload} aria-label={t('Actualizar saldo')} className="min-h-12 min-w-12 rounded-sm border-2 border-tinta bg-papel p-2 focus-visible:outline-2 focus-visible:outline-offset-2"><Icon name="history_toggle_off" /></button>
       </div>
       {s.data && <div className="w-full text-[12px] text-gris num">{t('Cuenta {addr} · firma {signer}', { addr: short(s.data.cooperative.stellar_address, 8), signer: t(s.data.signer === 'micopay' ? 'desde la app de MicoPay' : 'local de demo (testnet)') })}</div>}
     </div>

@@ -7,6 +7,13 @@ export interface Summary {
   network: string;
   signer: 'local' | 'micopay';
 }
+/** Identity of the configured settlement asset, as reported by the summary. */
+export type SettlementAsset = Pick<Summary, 'asset' | 'network'>;
+/** True when the summary carries a usable asset identity (code and issuer). */
+export const hasAssetIdentity = (s: Partial<Summary> | null | undefined): s is SettlementAsset =>
+  !!s && !!s.asset && typeof s.asset.code === 'string' && s.asset.code.length > 0 && typeof s.asset.issuer === 'string' && s.asset.issuer.length > 0 && typeof s.network === 'string';
+/** A balance may be presented as a peso equivalent only when the asset is peso-denominated, which the API cannot verify here. */
+export const canShowMxnEquivalent = (_s: Partial<Summary> | null | undefined): false => false;
 export interface QualityField { key: string; label: string; unit: string }
 export interface Product {
   id: number; name: string; unit: string; price: string | null; price_since: string | null; quality_schema: QualityField[];
