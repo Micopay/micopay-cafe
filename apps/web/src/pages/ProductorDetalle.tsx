@@ -6,7 +6,7 @@ import { dia, fecha, mxn, qty } from '../format';
 import { Badge, Button, Icon } from '../ui';
 import { useData } from '../useData';
 
-const CUENTA = { ok: ['verde', 'Puede recibir pagos'], sin_cuenta: ['aviso', 'Cuenta de Stellar no existe'], sin_trustline: ['aviso', 'Falta activar MXNe'] } as const;
+const CUENTA = { ok: ['verde', 'Puede recibir pagos'], sin_cuenta: ['aviso', 'Cuenta de Stellar no existe'], sin_trustline: ['aviso', 'Falta activar el activo de liquidación'] } as const;
 
 export default function ProductorDetalle() {
   const id = Number(useParams().id);

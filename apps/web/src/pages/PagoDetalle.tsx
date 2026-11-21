@@ -58,8 +58,8 @@ export default function PagoDetalle() {
           <dl className="p-5 grid gap-2.5 text-[14px]">
             <Fila e={t('Estado')} v={<EstadoPago s={d.status} />} />
             {d.result_code && <Fila e={t('Código de rechazo')} v={d.result_code} tono="text-rojo" />}
-            {d.token_amount && <Fila e={t('Liquidado en Stellar')} v={`${token(d.token_amount)} USDC`} tono="font-bold text-verde" />}
-            {d.fx_rate && <Fila e={t('Tipo de cambio')} v={`1 USD = ${Number(d.fx_rate).toFixed(4)} MXN`} />}
+            {d.token_amount && <Fila e={t('Liquidado en Stellar')} v={t('Activo de liquidación no informado') + ` · ${token(d.token_amount)}`} tono="font-bold text-verde" />}
+            {d.fx_rate && <Fila e={t('Tipo de cambio de referencia')} v={`1 USD = ${Number(d.fx_rate).toFixed(4)} MXN`} />}
             <Fila e={t('Transacción')} v={<Tx hash={d.tx_hash} n={10} />} />
             <Fila e={t('Liquidado')} v={d.settled_at ? fecha(d.settled_at) : '—'} />
             <Fila e={t('Orden (MsgId)')} v={<span className="num">{d.msg_id ?? '—'}</span>} />
