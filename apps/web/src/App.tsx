@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { NavLink, Route, Routes, useLocation } from 'react-router-dom';
 import { api } from './api';
 import { lang, setLang, t } from './i18n';
-import { mxn, short, token } from './format';
+import { short, token } from './format';
 import { Icon } from './ui';
 import { useData } from './useData';
 import RealizarPago from './pages/RealizarPago';
@@ -68,8 +68,6 @@ function Grupo({ titulo, items }: { titulo: string; items: typeof OPERACION }) {
 function Encabezado() {
   const s = useData(api.summary);
   const asset = s.data?.asset;
-  // The MXN equivalent is only shown when the API supports a conversion for the configured asset.
-  const mxnValida = !!asset && asset.code === 'MXNe' && !!s.data?.balanceMxn;
   return (
     <div className="mb-7 flex flex-wrap items-center justify-between gap-3 border-b-2 border-tinta pb-4">
       <div>
@@ -82,12 +80,11 @@ function Encabezado() {
           {s.data?.balance && asset ? (
             <>
               <div className="num font-display text-[22px] font-extrabold text-verde leading-tight">{token(s.data.balance)} {asset.code}</div>
-              <div className="num text-[12px] text-gris">{t('Emisor {issuer} · red {network}', { issuer: short(asset.issuer, 8), network: asset.network })}</div>
+              <div className="num text-[12px] text-gris">{t('Emisor {issuer} · red {network}', { issuer: short(asset.issuer, 8), network: s.data.network })}</div>
             </>
           ) : (
             <div className="num font-display text-[22px] font-extrabold text-verde leading-tight">{'—'}</div>
           )}
-          {mxnValida && <div className="num text-[12px] text-gris">{t('Equivalente {mxn}', { mxn: mxn(s.data!.balanceMxn!) })}</div>}
           {s.data?.fx && (
             <div className="num text-[12px] text-gris">{t('Referencia USD/MXN: 1 USD = {rate} MXN', { rate: Number(s.data.fx.rate).toFixed(2) })}</div>
           )}
