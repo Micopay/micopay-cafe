@@ -28,8 +28,6 @@ interface MoneyBlockProps {
   /** saldo = digital (verde) · cobro = efectivo por recibir (naranja). */
   tipo?: 'saldo' | 'cobro';
   pie?: ReactNode;
-  /** Pie de identidad del activo o marca de no informado; no se muestra en color solo. */
-  identidad?: ReactNode;
   className?: string;
   onClick?: () => void;
 }
@@ -39,7 +37,6 @@ export default function MoneyBlock({
   cifra,
   tipo = 'saldo',
   pie,
-  identidad,
   className = '',
   onClick,
 }: MoneyBlockProps) {
@@ -59,9 +56,6 @@ export default function MoneyBlock({
       >
         {cifra}
       </div>
-      {identidad ? (
-        <div className="mt-2.5 break-words text-[13px] text-gris-3">{identidad}</div>
-      ) : null}
       {pie ? <div className="mt-2.5 text-[13px] text-gris-3">{pie}</div> : null}
     </div>
   );
