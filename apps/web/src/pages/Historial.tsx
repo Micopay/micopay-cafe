@@ -36,7 +36,7 @@ export default function Historial() {
           <TextField etiqueta={t('Desde')} type="date" value={draft.from ?? ''} onChange={(e) => setDraft({ ...draft, from: e.target.value })} />
           <TextField etiqueta={t('Hasta')} type="date" value={draft.to ?? ''} onChange={(e) => setDraft({ ...draft, to: e.target.value })} />
           <Select etiqueta={t('Estado')} value={draft.status ?? ''} onChange={(e) => setDraft({ ...draft, status: e.target.value })}>
-            <option value="">{t('Todos')}</option><option value="paid">{t('Pagado')}</option><option value="pending">{t('Rechazado')}</option>
+            <option value="">{t('Todos')}</option><option value="paid">{t('Pagado')}</option><option value="pending">{t('Pendiente')}</option>
           </Select>
           <Select etiqueta={t('Productor')} value={draft.producerId ?? ''} onChange={(e) => setDraft({ ...draft, producerId: e.target.value ? Number(e.target.value) : undefined })}>
             <option value="">{t('Todos')}</option>{producers.data?.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -62,7 +62,7 @@ export default function Historial() {
                   <td className={`${tdNum} text-rojo`}>{castigos ? `− ${mxn(castigos)}` : '—'}</td>
                   <td className={`${tdNum} text-naranja`}>{Number(p.credit_repayment) ? `− ${mxn(p.credit_repayment)}` : '—'}</td>
                   <td className={`${tdNum} font-extrabold`}>{mxn(p.net)}</td>
-                  <td className={td}><EstadoPago s={p.status} /></td>
+                  <td className={td}><EstadoPago s={p.paymentState} paymentState={p.paymentState} /></td>
                   <td className={td}><Tx hash={p.tx_hash} /></td>
                 </tr>
               );
