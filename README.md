@@ -1,6 +1,6 @@
 # MicoPay Café
 
-**Pay smallholder farmers per kilo, at the scale, in seconds — with bank-grade records anyone can verify.**
+**Pay smallholder farmers per kilo, at the scale, in seconds — with bank-grade records anyone holding them can check against the public ledger.**
 
 In Veracruz, during the harvest, *compradoras de café* (seasonal buying points) open in the coffee towns. Producers bring **café cereza** — the freshly picked fruit they cannot process themselves — and are paid per kilo, in cash, before the buyer carries it to the *beneficio*. MicoPay Café gives those buyers, and cooperatives, a way to pay on the spot without carrying cash.
 
@@ -51,6 +51,8 @@ Two areas, mirroring the original desktop apps (operator + admin) of [coffee-pay
 ### Every payment, end to end
 `kilos × price − quality deduction` → **pain.001** with kilos, price and deductions in structured remittance → its SHA-256 becomes the memo of **the Stellar transaction** → **pain.002** status → **camt.054** receipt for the producer → **camt.053** statement with balances reconstructed from Horizon.
 
+The producer is always paid the MXN value of what was weighed. The amount agreed at the scale is fixed in MXN; the token amount is computed with the exchange rate at the moment the payment is sent, so a rate move between weighing and paying never changes what the producer receives.
+
 ### Payments that never pay twice
 
 A payment is retried **only when it is proven it did not happen**. A network failure while sending can leave a payment on the ledger even though the answer never arrived, so the API never reads "no answer" or an error code as "no money moved".
@@ -67,7 +69,7 @@ API fields: `status` (`settled`, `unconfirmed`, `failed_onchain`, `not_executed`
 
 - Settlement in seconds for a fraction of a cent.
 - **Any Stellar asset:** the payment asset is configuration, not code, so a buyer can pay in an existing tokenized peso, one issued by a third party, or digital dollars. The demo uses MicoPay's testnet USDC.
-- A public, tamper-evident ledger: the cooperative's records can be checked without trusting the cooperative or us. Personal data never goes on-chain — only amounts and hashes.
+- A public, tamper-evident ledger: whoever receives a payment's ISO 20022 documents (a bank, a lender, an auditor) can check, without trusting the cooperative or us, that they were not changed and that the money moved as they say. The ledger does not prove the kilos or the quality, which the buyer records. Personal data never goes on-chain — only amounts and hashes.
 
 ### Why ISO 20022
 
@@ -126,7 +128,7 @@ Next:
 
 ## Versión en español
 
-MicoPay Café es una plataforma para que las compradoras de café y las cooperativas paguen a los productores por kilo entregado, empezando por el café cereza que se compra en temporada de cosecha. El pago sale al momento en una transacción de Stellar, con cualquier activo, y cada pago genera mensajes ISO 20022 validados contra los esquemas oficiales, con la huella del `pain.001` anclada en el memo de la transacción. La conexión con la app de MicoPay está planeada y aún no está disponible: el productor cobraría en la app y podría guardar pesos digitales, mandarlos a su banco por SPEI o cambiarlos por efectivo con un agente, que podría ser la misma compradora. Los créditos de avío que se pagan con la cosecha quedan como posible implementación a futuro. Los documentos de diseño están en [`PLAN.md`](PLAN.md) y [`docs/`](docs/).
+MicoPay Café es una plataforma para que las compradoras de café y las cooperativas paguen a los productores por kilo entregado, empezando por el café cereza que se compra en temporada de cosecha. El pago sale al momento en una transacción de Stellar, con cualquier activo, y cada pago genera mensajes ISO 20022 validados contra los esquemas oficiales, con la huella del `pain.001` anclada en el memo de la transacción: quien reciba esos documentos, como un banco o un prestamista, puede comprobar sin confiar en nadie que no cambiaron y que el dinero se movió como dicen. El productor siempre recibe el valor en pesos de lo que se pesó: el monto queda fijo en MXN y el equivalente en el activo se calcula con el tipo de cambio del momento en que se envía el pago. La conexión con la app de MicoPay está planeada y aún no está disponible: el productor cobraría en la app y podría guardar pesos digitales, mandarlos a su banco por SPEI o cambiarlos por efectivo con un agente, que podría ser la misma compradora. Los créditos de avío que se pagan con la cosecha quedan como posible implementación a futuro. Los documentos de diseño están en [`PLAN.md`](PLAN.md) y [`docs/`](docs/).
 
 ## License
 
