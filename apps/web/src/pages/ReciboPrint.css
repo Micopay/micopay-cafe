@@ -1,0 +1,63 @@
+/* apps/web/src/pages/ReciboPrint.css */
+@media print {
+  @page {
+    size: letter portrait;
+    margin: 15mm;
+  }
+
+  /* Reset body and background for printing */
+  html, body {
+    background: #fff !important;
+    color: #16130f !important;
+    font-size: 13px;
+    line-height: 1.4;
+  }
+
+  /* Hide navigation, header, actions, and non-printable elements */
+  header, nav, button, a[href^="http"], .no-print, [role="navigation"] {
+    display: none !important;
+  }
+
+  /* Keep container width 100% and remove outer spacing/shadows */
+  .grid, .grid * {
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  /* Remove colored backgrounds and shadows from cards */
+  div, section, article {
+    background-color: transparent !important;
+    box-shadow: none !important;
+  }
+
+  /* Ensure ink borders remain crisp */
+  .border, .border-2, .border-t-2, .border-b-2 {
+    border-color: #16130f !important;
+  }
+
+  /* Force all text colors to ink/black for print */
+  .text-verde,
+  .text-naranja,
+  .text-rojo,
+  .text-gris,
+  .text-gris-3,
+  .text-tinta {
+    color: #16130f !important;
+  }
+
+  /* Ensure hash wraps cleanly onto multiple lines */
+  .recibo-hash {
+    word-break: break-all !important;
+    overflow-wrap: anywhere !important;
+    white-space: normal !important;
+    font-family: monospace;
+    font-size: 11px;
+    line-height: 1.3;
+  }
+
+  /* Avoid page breaks inside sections */
+  .recibo-container > * {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}
