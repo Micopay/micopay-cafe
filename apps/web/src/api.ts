@@ -7,6 +7,7 @@ export interface Summary {
   network: string;
   signer: 'local' | 'micopay';
 }
+export interface Health { ok: boolean; signer: 'local' | 'micopay'; network: string }
 export interface QualityField { key: string; label: string; unit: string }
 export interface Product {
   id: number; name: string; unit: string; price: string | null; price_since: string | null; quality_schema: QualityField[];
@@ -59,10 +60,14 @@ export interface Metrics {
 }
 export interface AuditRow { id: number; action: string; details: Record<string, unknown>; created_at: string }
 
-async function call<T>(path: string, body?: unknown, method = 'POST'): Promise<T> {
-  const res = await fetch(`/api${path}`, body === undefined ? undefined : {
-    method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
-  });
+async function call<T>(path: string, body?: unknown, method = 'POST', signal?: AbortSignal): Promise<T> {
+  const options: RequestInit = { signal };
+  if (body !== undefined) {
+    options.method = method;
+    options.headers = { 'content-type': 'application/json' };
+    options.body = JSON.stringify(body);
+  }
+  const res = await fetch(`/api${path}`, options);
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error((data as { error?: string }).error ?? `Error ${res.status}`);
   return data as T;
@@ -77,6 +82,7 @@ export interface PaymentFilters { from?: string; to?: string; status?: string; p
 
 export const api = {
   summary: () => call<Summary>('/summary'),
+  health: () => call<Health>('/health', undefined, 'GET', AbortSignal.timeout(5_000)),
   products: () => call<Product[]>('/products'),
   prices: (productId?: number) => call<PriceRow[]>(`/prices${qs({ productId })}`),
   setPrice: (productId: number, price: string) => call('/prices', { productId, price }),

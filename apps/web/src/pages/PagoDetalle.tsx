@@ -76,6 +76,7 @@ export default function PagoDetalle() {
             {d.run_id && <Doc href={`/api/runs/${d.run_id}/pain001`} nombre="pain.001" desc={t('Orden de pago')} />}
             {d.run_id && <Doc href={`/api/runs/${d.run_id}/pain002`} nombre="pain.002" desc={t('Estado')} />}
             {d.status === 'paid' && <Doc href={`/api/payments/${d.id}/camt054`} nombre="camt.054" desc={t('Aviso al productor')} />}
+            {d.tx_hash && <Link to={`/verificar?tx=${d.tx_hash}`}><Button variant="ghost"><Icon name="verified" /> {t('Verificar este pago')}</Button></Link>}
           </div>
         </Panel>
       </div>
