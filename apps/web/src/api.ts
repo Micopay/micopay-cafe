@@ -24,6 +24,19 @@ export interface ProducerDetail extends ProducerRow {
   history: Array<{ id: number; reference: string; created_at: string; product: string; unit: string; quantity: string; unit_price: string; gross: string; credit_repayment: string; net: string; status: string; tx_hash: string | null }>;
   credits: Array<{ id: number; reference: string; purpose: string; total_due: string; outstanding: string; due_date: string; status: CreditStatus }>;
 }
+export interface ProducerRecord {
+  producer: { name: string; community: string | null; stellar_address: string };
+  period: { from: string; to: string };
+  generated_at: string;
+  payments: Array<{
+    reference: string; date: string; product: string; kilos: string; unit: string; unit_price_mxn: string;
+    quality_deductions: Deduction[]; quality_deductions_mxn: string; net_mxn: string;
+    token_amount: string; asset: { code: string; issuer: string }; tx_hash: string; explorer_url: string;
+    pain001_sha256: string; pain001_url: string; camt054_url: string;
+  }>;
+  totals: { deliveries: number; kilos: string; net_mxn: string };
+  excluded: { unconfirmed: number; failed: number; other: number; total: number };
+}
 export interface Deduction { reason: string; label: string; amount: string }
 export interface Preview {
   unitPrice: string; dailyPrice: string; gross: string; deductions: Deduction[]; afterQuality: string; creditRepayment: string; net: string;
@@ -83,6 +96,8 @@ export const api = {
 
   producers: (q?: string) => call<ProducerRow[]>(`/producers${qs({ q })}`),
   producer: (id: number) => call<ProducerDetail>(`/producers/${id}`),
+  producerRecord: (id: number, from?: string, to?: string) =>
+    call<ProducerRecord>(`/producers/${id}/record${qs({ from, to })}`),
   createProducer: (b: { name: string; community?: string; contact?: string; stellarAddress: string }) => call<{ id: number; accountId: string; account: AccountState }>('/producers', b),
   setProducerActive: (id: number, isActive: boolean) => call(`/producers/${id}`, { isActive }, 'PATCH'),
   testnetAccount: () => call<{ address: string }>('/testnet/account', {}),

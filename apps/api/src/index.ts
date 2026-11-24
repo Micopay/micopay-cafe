@@ -67,6 +67,21 @@ const dayEnd = (d: string) => new Date(`${d}T23:59:59.999${TZ_OFFSET}`);
 const DATE = { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' };
 const MONEY = { type: 'string', pattern: '^\\d+(\\.\\d{1,2})?$' };
 
+function validDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
+function monthsBefore(value: string, months: number): string {
+  const [year = 0, month = 1, day = 1] = value.split('-').map(Number);
+  const targetMonth = month - 1 - months;
+  const targetYear = year + Math.floor(targetMonth / 12);
+  const normalizedMonth = ((targetMonth % 12) + 12) % 12;
+  const lastDay = new Date(Date.UTC(targetYear, normalizedMonth + 1, 0)).getUTCDate();
+  return `${targetYear}-${String(normalizedMonth + 1).padStart(2, '0')}-${String(Math.min(day, lastDay)).padStart(2, '0')}`;
+}
+
 async function currentPrice(productId: number): Promise<string> {
   const row = (await db.query<{ p: string }>(
     `SELECT price_per_unit::text AS p FROM prices WHERE product_id = $1 AND cooperative_id = 1 AND valid_from <= NOW() ORDER BY valid_from DESC, id DESC LIMIT 1`,
@@ -161,6 +176,78 @@ app.get<{ Params: { id: string } }>('/api/producers/:id', async (req, reply) => 
     SELECT c.id, c.reference, c.purpose, c.total_due::text, c.outstanding::text, c.due_date, ${STATUS_SQL} AS status
       FROM credits c WHERE c.producer_id = $1 ORDER BY c.created_at DESC`, [id])).rows;
   return { ...p, stats, history, credits, account: await accountStatus(p.stellar_address, asset) };
+});
+
+app.get<{ Params: { id: string }; Querystring: { from?: string; to?: string } }>('/api/producers/:id/record', async (req, reply) => {
+  const today = new Date(Date.now() - 6 * 3600_000).toISOString().slice(0, 10);
+  const to = req.query.to ?? today;
+  const from = req.query.from ?? monthsBefore(to, 12);
+  if (!validDate(from) || !validDate(to) || from > to) {
+    return reply.status(400).send({ error: 'rango de fechas inválido' });
+  }
+
+  const producer = (await db.query<{ name: string; community: string | null; stellar_address: string }>(
+    `SELECT name, community, stellar_address FROM producers WHERE id = $1`, [Number(req.params.id)],
+  )).rows[0];
+  if (!producer) return reply.status(404).send({ error: 'no existe' });
+
+  const rows = (await db.query<{
+    id: number; reference: string; date: Date; product: string; unit: string; quantity: string;
+    unit_price: string; deductions: Array<{ reason: string; label: string; amount: string }>;
+    net: string; token_amount: string; tx_hash: string; pain001_sha256: string; run_id: number;
+  }>(`
+    SELECT s.id, d.reference, d.created_at AS date, pr.name AS product, pr.unit, d.quantity::text,
+           s.unit_price::text, s.deductions, s.net::text, s.token_amount::text, r.tx_hash,
+           r.pain001_sha256, s.run_id
+      FROM settlements s JOIN deliveries d ON d.id = s.delivery_id JOIN products pr ON pr.id = d.product_id
+      JOIN payment_runs r ON r.id = s.run_id
+     WHERE d.producer_id = $1 AND d.created_at >= $2 AND d.created_at <= $3 AND ${PAYMENT_STATE_SQL} = 'paid'
+     ORDER BY d.created_at, d.id`, [Number(req.params.id), dayStart(from), dayEnd(to)])).rows;
+
+  const excluded = (await db.query<{ state: string; count: number }>(`
+    SELECT ${PAYMENT_STATE_SQL} AS state, COUNT(*)::int AS count
+      FROM settlements s JOIN deliveries d ON d.id = s.delivery_id LEFT JOIN payment_runs r ON r.id = s.run_id
+     WHERE d.producer_id = $1 AND d.created_at >= $2 AND d.created_at <= $3 AND ${PAYMENT_STATE_SQL} <> 'paid'
+     GROUP BY state`, [Number(req.params.id), dayStart(from), dayEnd(to)])).rows;
+  const excludedCounts = { unconfirmed: 0, failed: 0, other: 0 };
+  for (const item of excluded) {
+    if (item.state === 'unconfirmed') excludedCounts.unconfirmed += item.count;
+    else if (item.state === 'failed' || item.state === 'not_executed') excludedCounts.failed += item.count;
+    else excludedCounts.other += item.count;
+  }
+
+  const payments = rows.map((row) => ({
+    reference: row.reference,
+    date: row.date,
+    product: row.product,
+    kilos: row.quantity,
+    unit: row.unit,
+    unit_price_mxn: row.unit_price,
+    quality_deductions: row.deductions,
+    quality_deductions_mxn: row.deductions.reduce((sum, item) => sum.plus(item.amount), new Big(0)).toFixed(2),
+    net_mxn: row.net,
+    token_amount: row.token_amount,
+    asset: { code: asset.getCode(), issuer: asset.getIssuer() },
+    tx_hash: row.tx_hash,
+    explorer_url: explorerTx(row.tx_hash),
+    pain001_sha256: row.pain001_sha256,
+    pain001_url: `/api/runs/${row.run_id}/pain001`,
+    camt054_url: `/api/payments/${row.id}/camt054`,
+  }));
+  const totals = payments.reduce((sum, payment) => ({
+    deliveries: sum.deliveries + 1,
+    kilos: sum.kilos.plus(payment.kilos),
+    net_mxn: sum.net_mxn.plus(payment.net_mxn),
+  }), { deliveries: 0, kilos: new Big(0), net_mxn: new Big(0) });
+  const excludedTotal = excludedCounts.unconfirmed + excludedCounts.failed + excludedCounts.other;
+  return {
+    producer,
+    period: { from, to },
+    generated_at: new Date().toISOString(),
+    payments,
+    totals: { deliveries: totals.deliveries, kilos: totals.kilos.toString(), net_mxn: totals.net_mxn.toFixed(2) },
+    excluded: { ...excludedCounts, total: excludedTotal },
+  };
 });
 
 app.post<{ Body: { name: string; community?: string; contact?: string; stellarAddress: string } }>('/api/producers', {
