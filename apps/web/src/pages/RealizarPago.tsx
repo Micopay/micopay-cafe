@@ -26,7 +26,7 @@ export default function RealizarPago() {
   const [notes, setNotes] = useState('');
   const [preview, setPreview] = useState<Preview | null>(null);
   const [previewStale, setPreviewStale] = useState(false);
-  const [unconfirmedDeliveries, setUnconfirmedDeliveries] = useState<string[]>([]);
+  const [unconfirmedProducers, setUnconfirmedProducers] = useState<number[]>([]);
   const previewSeqRef = useRef(0);
   const [error, setError] = useState<string | null>(null);
   const [confirmando, setConfirmando] = useState(false);
@@ -46,8 +46,7 @@ export default function RealizarPago() {
   const valid = producerId !== null && productId !== null && DEC.test(quantity) && Number(quantity) > 0 && DEC.test(price) && Number(price) > 0;
   const input = valid ? { producerId: producerId!, productId: productId!, quantity, quality: qualityNumbers, unitPrice: price, lot: lot || undefined, notes: notes || undefined } : null;
 
-  const deliveryKey = input ? JSON.stringify(input) : '';
-  const isBlocked = deliveryKey !== '' && unconfirmedDeliveries.includes(deliveryKey);
+  const isBlocked = producerId !== null && unconfirmedProducers.includes(producerId);
 
   useEffect(() => {
     setConfirmando(false);
@@ -85,7 +84,7 @@ export default function RealizarPago() {
 
   async function pagar() {
     if (!input || isBlocked) return;
-    const currentDeliveryKey = JSON.stringify(input);
+    const currentProducerId = producerId!;
     setPaying(true); setError(null);
     try {
       const r = await api.pay(input);
@@ -93,14 +92,14 @@ export default function RealizarPago() {
       if (r.status === 'failed_onchain' || r.status === 'not_executed') {
         setError(t('Stellar rechazó la transacción ({code}). No se movió dinero; puedes reintentar desde el historial.', { code: r.resultCode ?? '' }));
       } else if (r.status !== 'settled') {
-        setUnconfirmedDeliveries((prev) => (prev.includes(currentDeliveryKey) ? prev : [...prev, currentDeliveryKey]));
-        setError(t('Pago sin confirmar. No lo repitas; revisa el historial de pagos.'));
+        setUnconfirmedProducers((prev) => (prev.includes(currentProducerId) ? prev : [...prev, currentProducerId]));
+        setError(t('Pago sin confirmar. No lo repitas; revisa el historial de pagos antes de intentar otro pago a este productor.'));
       } else {
         setResult(r); setQuantity(''); setQuality({}); setLot(''); setNotes(''); producer.reload();
       }
     } catch (e) {
-      setUnconfirmedDeliveries((prev) => (prev.includes(currentDeliveryKey) ? prev : [...prev, currentDeliveryKey]));
-      setError(t('Pago sin confirmar. Error: {msg}. No lo repitas; revisa el historial de pagos.', { msg: (e as Error).message }));
+      setUnconfirmedProducers((prev) => (prev.includes(currentProducerId) ? prev : [...prev, currentProducerId]));
+      setError(t('Pago sin confirmar. Error: {msg}. No lo repitas; revisa el historial de pagos antes de intentar otro pago a este productor.', { msg: (e as Error).message }));
     } finally {
       setPaying(false); setConfirmando(false);
     }
@@ -213,7 +212,7 @@ export default function RealizarPago() {
                       {error && <div className="mt-4"><ErrorCaja mensaje={error} /></div>}
                       {isBlocked && (
                         <div className="mt-3 border-2 border-linea bg-papel px-3 py-2 text-[13px] font-semibold text-gris">
-                          {t('Esta entrega tiene un pago sin confirmar. Revisa el historial de pagos y no pagues de nuevo.')}
+                          {t('Este productor tiene un pago sin confirmar. Revisa el historial de pagos y no pagues de nuevo.')}
                         </div>
                       )}
                       {!confirmando ? (
