@@ -5,54 +5,61 @@
     margin: 15mm;
   }
 
-  /* Reset body and background for printing */
-  html, body {
+  /* When printing the receipt, reset container styling to plain black-and-white */
+  .recibo-container {
     background: #fff !important;
     color: #16130f !important;
     font-size: 13px;
     line-height: 1.4;
+    box-shadow: none !important;
   }
 
-  /* Hide navigation, header, actions, and non-printable elements */
-  header, nav, button, a[href^="http"], .no-print, [role="navigation"] {
+  /* Scoped hiding of non-printable elements inside receipt */
+  .recibo-container .no-print,
+  .recibo-container button {
     display: none !important;
   }
 
-  /* Keep container width 100% and remove outer spacing/shadows */
-  .grid, .grid * {
+  /* Remove colored backgrounds and shadows exclusively within the receipt */
+  .recibo-container * {
     box-shadow: none !important;
     text-shadow: none !important;
   }
 
-  /* Remove colored backgrounds and shadows from cards */
-  div, section, article {
+  .recibo-container div,
+  .recibo-container section,
+  .recibo-container article {
     background-color: transparent !important;
     box-shadow: none !important;
   }
 
-  /* Ensure ink borders remain crisp */
-  .border, .border-2, .border-t-2, .border-b-2 {
+  /* Keep ink borders crisp inside receipt */
+  .recibo-container .border,
+  .recibo-container .border-2,
+  .recibo-container .border-t-2,
+  .recibo-container .border-b-2 {
     border-color: #16130f !important;
   }
 
-  /* Force all text colors to ink/black for print */
-  .text-verde,
-  .text-naranja,
-  .text-rojo,
-  .text-gris,
-  .text-gris-3,
-  .text-tinta {
+  /* Force all text colors to ink/black for print within the receipt */
+  .recibo-container .text-verde,
+  .recibo-container .text-naranja,
+  .recibo-container .text-rojo,
+  .recibo-container .text-gris,
+  .recibo-container .text-gris-3,
+  .recibo-container .text-tinta {
     color: #16130f !important;
   }
 
   /* Ensure hash wraps cleanly onto multiple lines */
-  .recibo-hash {
+  .recibo-container .recibo-hash {
     word-break: break-all !important;
     overflow-wrap: anywhere !important;
     white-space: normal !important;
     font-family: monospace;
     font-size: 11px;
     line-height: 1.3;
+    color: #16130f !important;
   }
 
   /* Avoid page breaks inside sections */
