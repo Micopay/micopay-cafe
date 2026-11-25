@@ -24,6 +24,11 @@ function HistorialProductor({ id }: { id: number }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    document.body.classList.add('print-producer-record');
+    return () => document.body.classList.remove('print-producer-record');
+  }, []);
+
+  useEffect(() => {
     let active = true;
     setManifest(null);
     setError(null);
@@ -75,9 +80,9 @@ function HistorialProductor({ id }: { id: number }) {
       </Panel>
 
       {currentManifest && (
-        <div className="record-print-area">
-          <header className="record-print-heading">
-            <h1>{t('Historial del productor')}</h1>
+        <div className="record-print-area mt-4 rounded-lg border-2 border-tinta bg-papel p-4">
+          <header className="record-print-heading mb-4 border-b-2 border-tinta pb-3 text-[13px]">
+            <h1 className="mb-2 font-display text-[22px] font-extrabold">{t('Historial del productor')}</h1>
             <p className="font-bold">{currentManifest.producer.name}</p>
             <p>{currentManifest.producer.community ?? '—'}</p>
             <p className="record-address">{currentManifest.producer.stellar_address}</p>
@@ -85,41 +90,44 @@ function HistorialProductor({ id }: { id: number }) {
             <p>{t('Generado: {date}', { date: dia(currentManifest.generated_at) })}</p>
           </header>
           {currentManifest.payments.length === 0 ? (
-            <p className="border-2 border-tinta px-4 py-6">{t('No hay pagos en este periodo.')}</p>
+            <p className="border-2 border-tinta px-4 py-6 text-[14px]">{t('No hay pagos en este periodo.')}</p>
           ) : (
             <>
               {pages.map((payments, page) => (
                 <section key={page} className="record-print-page">
-                  <table className="record-print-table">
-                    <thead><tr>
-                      <th>{t('Fecha')}</th><th>{t('Entrega')}</th><th>{t('Producto')}</th>
-                      <th>{t('Kilos')}</th><th>{t('Precio')}</th><th>{t('Castigos de calidad')}</th>
-                      <th>{t('Neto')}</th><th>{t('Transacción')}</th>
-                    </tr></thead>
+                  <div className="overflow-x-auto">
+                    <table className="record-print-table min-w-[760px] text-[13px]">
+                      <thead className="bg-tinta text-left text-[11px] uppercase tracking-[.08em] text-papel"><tr>
+                        <th className="px-2 py-2">{t('Fecha')}</th><th className="px-2 py-2">{t('Entrega')}</th>
+                        <th className="px-2 py-2">{t('Producto')}</th><th className="px-2 py-2 text-right">{t('Kilos')}</th>
+                        <th className="px-2 py-2 text-right">{t('Precio')}</th><th className="px-2 py-2 text-right">{t('Castigos de calidad')}</th>
+                        <th className="px-2 py-2 text-right">{t('Neto')}</th><th className="px-2 py-2">{t('Transacción')}</th>
+                      </tr></thead>
                     <tbody>{payments.map((payment) => (
                       <tr key={payment.reference}>
-                        <td>{dia(payment.date)}</td>
-                        <td className="num">{payment.reference}</td>
-                        <td>{t(payment.product)}</td>
-                        <td className="num">{qty(payment.kilos)} {payment.unit}</td>
-                        <td className="num">{mxn(payment.unit_price_mxn)}</td>
-                        <td className="num">{mxn(payment.quality_deductions_mxn)}</td>
-                        <td className="num">{mxn(payment.net_mxn)}</td>
-                        <td className="num"><a href={payment.explorer_url}>{short(payment.tx_hash, 6)}</a></td>
+                        <td className="px-2 py-2 align-top">{dia(payment.date)}</td>
+                        <td className="num px-2 py-2 align-top">{payment.reference}</td>
+                        <td className="px-2 py-2 align-top">{t(payment.product)}</td>
+                        <td className="num whitespace-nowrap px-2 py-2 text-right align-top">{qty(payment.kilos)} {payment.unit}</td>
+                        <td className="num whitespace-nowrap px-2 py-2 text-right align-top">{mxn(payment.unit_price_mxn)}</td>
+                        <td className="num whitespace-nowrap px-2 py-2 text-right align-top">{mxn(payment.quality_deductions_mxn)}</td>
+                        <td className="num whitespace-nowrap px-2 py-2 text-right align-top">{mxn(payment.net_mxn)}</td>
+                        <td className="num px-2 py-2 align-top"><a className="font-bold text-verde underline" href={payment.explorer_url}>{short(payment.tx_hash, 6)}</a></td>
                       </tr>
                     ))}</tbody>
-                  </table>
+                    </table>
+                  </div>
                 </section>
               ))}
-              <div className="record-print-totals">
+              <div className="record-print-totals mt-4 flex flex-wrap items-center justify-between gap-3 border-y-2 border-tinta py-3 text-[14px]">
                 <strong>{t('Totales')}</strong>
-                <span>{t('Entregas')}: <b className="num">{currentManifest.totals.deliveries}</b></span>
-                <span>{t('Kilos')}: <b className="num">{qty(currentManifest.totals.kilos)} kg</b></span>
-                <span>{t('Neto recibido')}: <b className="num">{mxn(currentManifest.totals.net_mxn)}</b></span>
+                <span>{t('Entregas')}: <b className="num font-bold">{currentManifest.totals.deliveries}</b></span>
+                <span>{t('Kilos')}: <b className="num font-bold">{qty(currentManifest.totals.kilos)} kg</b></span>
+                <span>{t('Neto recibido')}: <b className="num font-bold">{mxn(currentManifest.totals.net_mxn)}</b></span>
               </div>
             </>
           )}
-          <p className="record-verification">{t('Cada pago puede verificarse en /verificar con su pain.001 y su transacción de Stellar.')}</p>
+          <p className="record-verification mt-3 text-[12px] text-gris">{t('Cada pago puede verificarse en /verificar con su pain.001 y su transacción de Stellar.')}</p>
         </div>
       )}
     </>

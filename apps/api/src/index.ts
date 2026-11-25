@@ -179,6 +179,11 @@ app.get<{ Params: { id: string } }>('/api/producers/:id', async (req, reply) => 
 });
 
 app.get<{ Params: { id: string }; Querystring: { from?: string; to?: string } }>('/api/producers/:id/record', async (req, reply) => {
+  const producerId = Number(req.params.id);
+  if (!Number.isSafeInteger(producerId) || producerId < 1) {
+    return reply.status(400).send({ error: 'id de productor inválido' });
+  }
+
   const today = new Date(Date.now() - 6 * 3600_000).toISOString().slice(0, 10);
   const to = req.query.to ?? today;
   const from = req.query.from ?? monthsBefore(to, 12);
@@ -187,7 +192,7 @@ app.get<{ Params: { id: string }; Querystring: { from?: string; to?: string } }>
   }
 
   const producer = (await db.query<{ name: string; community: string | null; stellar_address: string }>(
-    `SELECT name, community, stellar_address FROM producers WHERE id = $1`, [Number(req.params.id)],
+    `SELECT name, community, stellar_address FROM producers WHERE id = $1`, [producerId],
   )).rows[0];
   if (!producer) return reply.status(404).send({ error: 'no existe' });
 
@@ -202,13 +207,13 @@ app.get<{ Params: { id: string }; Querystring: { from?: string; to?: string } }>
       FROM settlements s JOIN deliveries d ON d.id = s.delivery_id JOIN products pr ON pr.id = d.product_id
       JOIN payment_runs r ON r.id = s.run_id
      WHERE d.producer_id = $1 AND d.created_at >= $2 AND d.created_at <= $3 AND ${PAYMENT_STATE_SQL} = 'paid'
-     ORDER BY d.created_at, d.id`, [Number(req.params.id), dayStart(from), dayEnd(to)])).rows;
+     ORDER BY d.created_at, d.id`, [producerId, dayStart(from), dayEnd(to)])).rows;
 
   const excluded = (await db.query<{ state: string; count: number }>(`
     SELECT ${PAYMENT_STATE_SQL} AS state, COUNT(*)::int AS count
       FROM settlements s JOIN deliveries d ON d.id = s.delivery_id LEFT JOIN payment_runs r ON r.id = s.run_id
      WHERE d.producer_id = $1 AND d.created_at >= $2 AND d.created_at <= $3 AND ${PAYMENT_STATE_SQL} <> 'paid'
-     GROUP BY state`, [Number(req.params.id), dayStart(from), dayEnd(to)])).rows;
+     GROUP BY state`, [producerId, dayStart(from), dayEnd(to)])).rows;
   const excludedCounts = { unconfirmed: 0, failed: 0, other: 0 };
   for (const item of excluded) {
     if (item.state === 'unconfirmed') excludedCounts.unconfirmed += item.count;

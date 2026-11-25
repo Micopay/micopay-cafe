@@ -82,6 +82,8 @@ if (recordedPayment) {
 }
 const badRecordDate = await fetch(`${API}/producers/1/record?from=2026-02-30`);
 check(badRecordDate.status === 400, 'rechaza fechas calendario inválidas en el historial');
+const badRecordId = await fetch(`${API}/producers/abc/record`);
+check(badRecordId.status === 400, 'rechaza ids no numéricos en el historial');
 const missingProducerRecord = await fetch(`${API}/producers/999999/record`);
 check(missingProducerRecord.status === 404, 'productor desconocido en el historial responde 404');
 await xsd(`/runs/${detail.run_id}/pain002`, 'pain.002.001.10');
