@@ -71,6 +71,21 @@ const run = await memoHex(pay.txHash);
 const detail = await j(`/payments/${pay.settlementId}`);
 const pain001 = await xsd(`/runs/${detail.run_id}/pain001`, 'pain.001.001.09');
 check(run.successful && run.operation_count === 1 && run.hex === createHash('sha256').update(pain001).digest('hex'), 'una transacción, 1 operación (sin abono), memo = SHA-256 del pain.001');
+const producerRecord = await j<any>(`/producers/1/record`);
+const recordedPayment = producerRecord.payments.find((p: any) => p.reference === detail.reference);
+check(recordedPayment?.pain001_sha256 === createHash('sha256').update(pain001).digest('hex'), 'el historial del productor enlaza el pain.001 verificado');
+const kilosTotal = producerRecord.payments.reduce((sum: number, p: any) => sum + Number(p.kilos), 0);
+check(producerRecord.totals.deliveries === producerRecord.payments.length && Math.abs(Number(producerRecord.totals.kilos) - kilosTotal) < 0.00001, 'totales del historial del productor');
+if (recordedPayment) {
+  const recordPain001 = await (await fetch(new URL(recordedPayment.pain001_url, API))).text();
+  check(recordedPayment.pain001_sha256 === createHash('sha256').update(recordPain001).digest('hex'), 'SHA-256 del documento disponible en el historial');
+}
+const badRecordDate = await fetch(`${API}/producers/1/record?from=2026-02-30`);
+check(badRecordDate.status === 400, 'rechaza fechas calendario inválidas en el historial');
+const badRecordId = await fetch(`${API}/producers/abc/record`);
+check(badRecordId.status === 400, 'rechaza ids no numéricos en el historial');
+const missingProducerRecord = await fetch(`${API}/producers/999999/record`);
+check(missingProducerRecord.status === 404, 'productor desconocido en el historial responde 404');
 await xsd(`/runs/${detail.run_id}/pain002`, 'pain.002.001.10');
 await xsd(`/payments/${pay.settlementId}/camt054`, 'camt.054.001.08');
 check(detail.paymentState === 'paid' && detail.retryAllowed === false, 'estado del pago y sin reintento');

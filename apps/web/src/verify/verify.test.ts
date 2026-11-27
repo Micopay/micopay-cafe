@@ -1,15 +1,13 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { base64ToHex, parsePain001, parseTxInput, sha256Hex, verifyPayment, type HorizonClient, type HorizonResponse } from './verify.js';
 
-const FIXTURE = join(import.meta.dirname, 'fixtures');
+const FIXTURES = import.meta.glob('./fixtures/*.xml', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 
 function fixture(name: string): Uint8Array<ArrayBuffer> {
   // new Uint8Array(typedArray) copies into a plain ArrayBuffer-backed view.
-  return new Uint8Array(enc.encode(readFileSync(join(FIXTURE, name), 'utf8')));
+  return new Uint8Array(enc.encode(FIXTURES[`./fixtures/${name}`]!));
 }
 
 /* ── mock Horizon ─────────────────────────────────────────────────────────── */
