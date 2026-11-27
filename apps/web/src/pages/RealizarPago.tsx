@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { t } from '../i18n';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api, type PaymentResult, type Preview } from '../api';
@@ -25,6 +25,9 @@ export default function RealizarPago() {
   const [lot, setLot] = useState('');
   const [notes, setNotes] = useState('');
   const [preview, setPreview] = useState<Preview | null>(null);
+  const [previewStale, setPreviewStale] = useState(false);
+  const [unconfirmedProducers, setUnconfirmedProducers] = useState<number[]>([]);
+  const previewSeqRef = useRef(0);
   const [error, setError] = useState<string | null>(null);
   const [confirmando, setConfirmando] = useState(false);
   const [paying, setPaying] = useState(false);
@@ -43,10 +46,33 @@ export default function RealizarPago() {
   const valid = producerId !== null && productId !== null && DEC.test(quantity) && Number(quantity) > 0 && DEC.test(price) && Number(price) > 0;
   const input = valid ? { producerId: producerId!, productId: productId!, quantity, quality: qualityNumbers, unitPrice: price, lot: lot || undefined, notes: notes || undefined } : null;
 
+  const isBlocked = producerId !== null && unconfirmedProducers.includes(producerId);
+
   useEffect(() => {
     setConfirmando(false);
-    if (!input) { setPreview(null); return; }
-    const t = setTimeout(() => { api.preview(input).then((p) => { setPreview(p); setError(null); }).catch((e: Error) => setError(e.message)); }, 250);
+    setPreviewStale(true);
+    if (!input) {
+      setPreview(null);
+      setPreviewStale(false);
+      return;
+    }
+    const currentSeq = ++previewSeqRef.current;
+    const t = setTimeout(() => {
+      api.preview(input)
+        .then((p) => {
+          if (currentSeq === previewSeqRef.current) {
+            setPreview(p);
+            setError(null);
+            setPreviewStale(false);
+          }
+        })
+        .catch((e: Error) => {
+          if (currentSeq === previewSeqRef.current) {
+            setError(e.message);
+            setPreviewStale(false);
+          }
+        });
+    }, 250);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [producerId, productId, quantity, price, qualityNumbers]);
@@ -57,16 +83,23 @@ export default function RealizarPago() {
   }
 
   async function pagar() {
-    if (!input) return;
+    if (!input || isBlocked) return;
+    const currentProducerId = producerId!;
     setPaying(true); setError(null);
     try {
       const r = await api.pay(input);
       // Only a failed ledger record or an envelope that never left proves no money moved.
-      if (r.status === 'failed_onchain' || r.status === 'not_executed') setError(t('Stellar rechazó la transacción ({code}). No se movió dinero; puedes reintentar desde el historial.', { code: r.resultCode ?? '' }));
-      else if (r.status !== 'settled') setError(t('El pago quedó sin confirmar. No lo repitas; revisa el historial.'));
-      else { setResult(r); setQuantity(''); setQuality({}); setLot(''); setNotes(''); producer.reload(); }
+      if (r.status === 'failed_onchain' || r.status === 'not_executed') {
+        setError(t('Stellar rechazó la transacción ({code}). No se movió dinero; puedes reintentar desde el historial.', { code: r.resultCode ?? '' }));
+      } else if (r.status !== 'settled') {
+        setUnconfirmedProducers((prev) => (prev.includes(currentProducerId) ? prev : [...prev, currentProducerId]));
+        setError(t('Pago sin confirmar. No lo repitas; revisa el historial de pagos antes de intentar otro pago a este productor.'));
+      } else {
+        setResult(r); setQuantity(''); setQuality({}); setLot(''); setNotes(''); producer.reload();
+      }
     } catch (e) {
-      setError((e as Error).message);
+      setUnconfirmedProducers((prev) => (prev.includes(currentProducerId) ? prev : [...prev, currentProducerId]));
+      setError(t('Pago sin confirmar. Error: {msg}. No lo repitas; revisa el historial de pagos antes de intentar otro pago a este productor.', { msg: (e as Error).message }));
     } finally {
       setPaying(false); setConfirmando(false);
     }
@@ -128,7 +161,7 @@ export default function RealizarPago() {
                 )}
               </Panel>
 
-              <div className="grid gap-6 xl:grid-cols-[1fr_380px] items-start">
+              <div className="grid gap-6 md:grid-cols-[1fr_360px] xl:grid-cols-[1fr_380px] items-start">
                 <section className="grid gap-5">
                   <div>
                     <Label>{t('Producto')}</Label>
@@ -159,7 +192,7 @@ export default function RealizarPago() {
                   </div>
                 </section>
 
-                <aside className="xl:sticky xl:top-8">
+                <aside className="md:sticky md:top-8 xl:sticky xl:top-8">
                   <Panel sombra>
                     <BarraPanel>{t('Total a pagar')}</BarraPanel>
                     <div className="p-5">
@@ -177,14 +210,19 @@ export default function RealizarPago() {
                         </dl>
                       )}
                       {error && <div className="mt-4"><ErrorCaja mensaje={error} /></div>}
+                      {isBlocked && (
+                        <div className="mt-3 border-2 border-linea bg-papel px-3 py-2 text-[13px] font-semibold text-gris">
+                          {t('Este productor tiene un pago sin confirmar. Revisa el historial de pagos y no pagues de nuevo.')}
+                        </div>
+                      )}
                       {!confirmando ? (
-                        <Button block className="mt-5" disabled={!preview || p.account !== 'ok'} onClick={() => setConfirmando(true)}>
+                        <Button block className="mt-5" disabled={!preview || previewStale || p.account !== 'ok' || isBlocked} onClick={() => setConfirmando(true)}>
                           <Icon name="payments" /> {t('Ejecutar pago')}
                         </Button>
                       ) : (
                         <div className="mt-5 grid gap-3">
                           <div className="text-[14px]">{t('¿Confirmas el pago de {amount} a {name}?', { amount: mxn(preview?.net), name: p.name })}{Number(preview?.creditRepayment) > 0 && t(' Incluye el abono de {amount} al prestamista.', { amount: mxn(preview?.creditRepayment) })} {t('Se ejecuta en Stellar testnet.')}</div>
-                          <Button block disabled={paying} onClick={pagar}><Icon name="lock" /> {paying ? t('Firmando y enviando…') : t('Confirmar pago')}</Button>
+                          <Button block disabled={paying || isBlocked || previewStale} onClick={pagar}><Icon name="lock" /> {paying ? t('Firmando y enviando…') : t('Confirmar pago')}</Button>
                           <Button block variant="ghost" disabled={paying} onClick={() => setConfirmando(false)}>{t('Cancelar')}</Button>
                         </div>
                       )}
