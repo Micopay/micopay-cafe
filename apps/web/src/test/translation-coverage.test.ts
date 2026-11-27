@@ -1,65 +1,31 @@
-import { parse } from '@babel/parser';
-import traverse from '@babel/traverse';
-import { glob } from 'glob';
-import { readFile } from 'fs/promises';
+import ts from 'typescript';
+import { describe, expect, it } from 'vitest';
 import { EN } from '../i18n';
 
+const sources = import.meta.glob(['../**/*.{ts,tsx}', '!../**/*.test.{ts,tsx}', '!./**'], {
+  query: '?raw', import: 'default', eager: true,
+}) as Record<string, string>;
+
 describe('Translation coverage', () => {
-  it('every literal t() key has an entry in the EN dictionary', async () => {
-    const files = await glob('src/**/*.{ts,tsx}', { cwd: process.cwd() });
-    const missingKeys: Array<{ file: string; key: string; line: number }> = [];
-
-    for (const file of files) {
-      const content = await readFile(file, 'utf-8');
-      let ast;
-
-      try {
-        ast = parse(content, {
-          sourceType: 'module',
-          plugins: ['jsx', 'typescript'],
-        });
-      } catch (e) {
-        // Skip files that can't be parsed (e.g., test files with special syntax)
-        continue;
-      }
-
-      traverse(ast, {
-        CallExpression(path) {
-          const callee = path.node.callee;
-          // Check if this is a t() call
-          if (callee.type === 'Identifier' && callee.name === 't') {
-            const args = path.node.arguments;
-            if (args.length > 0) {
-              const firstArg = args[0];
-              let key: string | null = null;
-
-              // Extract literal string (single or double quotes)
-              if (firstArg.type === 'StringLiteral') {
-                key = firstArg.value;
-              }
-              // Extract static template literal (no expressions)
-              else if (firstArg.type === 'TemplateLiteral' && firstArg.expressions.length === 0) {
-                key = firstArg.quasis[0].value.raw;
-              }
-
-              if (key !== null && !(key in EN)) {
-                missingKeys.push({
-                  file,
-                  key,
-                  line: path.node.loc?.start.line ?? 0,
-                });
-              }
-            }
+  it('every literal t() key has an entry in the EN dictionary', () => {
+    const missing: string[] = [];
+    for (const [file, text] of Object.entries(sources)) {
+      const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, file.endsWith('x') ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+      const broken = (source as unknown as { parseDiagnostics: ts.Diagnostic[] }).parseDiagnostics;
+      expect(broken, `${file} does not parse`).toHaveLength(0);
+      const visit = (node: ts.Node) => {
+        if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 't') {
+          const arg = node.arguments[0];
+          if (arg && (ts.isStringLiteral(arg) || ts.isNoSubstitutionTemplateLiteral(arg)) && !(arg.text in EN)) {
+            const line = source.getLineAndCharacterOfPosition(arg.getStart()).line + 1;
+            missing.push(`${file}:${line} "${arg.text}"`);
           }
-        },
-      });
+        }
+        ts.forEachChild(node, visit);
+      };
+      visit(source);
     }
-
-    if (missingKeys.length > 0) {
-      const message = missingKeys
-        .map(({ file, key, line }) => `  ${file}:${line} - missing key: "${key}"`)
-        .join('\n');
-      expect.fail(`Found ${missingKeys.length} t() keys without EN translations:\n${message}`);
-    }
+    expect(Object.keys(sources).length).toBeGreaterThan(10);
+    expect(missing, `t() keys without EN translation:\n${missing.join('\n')}`).toEqual([]);
   });
 });
