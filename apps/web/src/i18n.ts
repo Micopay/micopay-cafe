@@ -33,7 +33,7 @@ export function t(s: string, vars?: Record<string, string | number>): string {
   return out;
 }
 
-const EN: Record<string, string> = {
+export const EN: Record<string, string> = {
   // navigation and chrome
   'Operación': 'Operations',
   'Administración': 'Admin',
