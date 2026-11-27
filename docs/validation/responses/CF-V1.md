@@ -1,7 +1,7 @@
 # CF-V1 · Coffee buyer (compradora / cooperative) perspective
 
-- **Issue:** CF-V1
-- **Country / general region:** Latin America (Mexico / Southern Cone context, general region)
+- **Issue:** #10
+- **Country / general region:** Mexico
 - **Did you run the demo locally?** no
 
 ## 1. First read — what do you think it is?
