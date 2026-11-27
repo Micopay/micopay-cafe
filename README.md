@@ -101,6 +101,8 @@ npm run dev:web            # http://localhost:5180
 
 Then: **Realizar pago** → pick Pedro Martínez → *Café cereza* is preselected at the demo price → weigh 600 kg → **Ejecutar pago**. Open the transaction on stellar.expert and the ISO documents under **Historial**.
 
+To verify a payment from a clean clone: open that payment in **Historial**, download its `pain.001`, then open **Verificar** (or use **Verificar este pago** in the payment detail). Drop the XML, paste the transaction hash or its stellar.expert link, and select **Testnet** if the API is unavailable. The page reads the file locally and checks its SHA-256 memo and every transfer against public Horizon.
+
 For a producer's bank-ready record, open **Productores** → choose a producer → set the date range under **Historial del productor**. **Descargar JSON** saves the manifest; **Imprimir** opens a US Letter, black-and-white layout (up to 25 deliveries per page). The API is `GET /api/producers/:id/record?from=YYYY-MM-DD&to=YYYY-MM-DD`; omitted dates default to the last 12 months. Only confirmed paid settlements are listed.
 
 > **Running it outside MicoPay:** the seed mints demo USDC with the issuer key of MicoPay's testnet USDC (`~/.micopay/ensayo-usdc.json`), so it does not run as is without that key. The exchange rate comes from `api.micopay.app`; set `FX_MXN_PER_USD` (for example `17.20`) if it does not answer.
