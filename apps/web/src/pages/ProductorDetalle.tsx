@@ -1,12 +1,138 @@
+import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { t } from '../i18n';
-import { api } from '../api';
+import { api, type ProducerRecord } from '../api';
 import { Cargando, Dato, ErrorCaja, EstadoCredito, EstadoPago, Panel, Subtitulo, Tabla, td, tdNum, Titulo, Tx } from '../comun';
-import { dia, fecha, mxn, qty } from '../format';
-import { Badge, Button, Icon } from '../ui';
+import { dia, fecha, mxn, qty, short, hoy } from '../format';
+import { Badge, Button, Icon, TextField } from '../ui';
 import { useData } from '../useData';
 
 const CUENTA = { ok: ['verde', 'Puede recibir pagos'], sin_cuenta: ['aviso', 'Cuenta de Stellar no existe'], sin_trustline: ['aviso', 'Falta activar MXNe'] } as const;
+
+function defaultRecordFrom(to: string) {
+  const [year = 0, month = 1, day = 1] = to.split('-').map(Number);
+  const targetYear = year - 1;
+  const lastDay = new Date(Date.UTC(targetYear, month, 0)).getUTCDate();
+  return `${targetYear}-${String(month).padStart(2, '0')}-${String(Math.min(day, lastDay)).padStart(2, '0')}`;
+}
+
+function HistorialProductor({ id }: { id: number }) {
+  const [to, setTo] = useState(hoy());
+  const [from, setFrom] = useState(() => defaultRecordFrom(hoy()));
+  const [manifest, setManifest] = useState<ProducerRecord | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    document.body.classList.add('print-producer-record');
+    return () => document.body.classList.remove('print-producer-record');
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    setManifest(null);
+    setError(null);
+    setLoading(true);
+    api.producerRecord(id, from, to)
+      .then((result) => { if (active) setManifest(result); })
+      .catch((cause: Error) => { if (active) setError(cause.message); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [id, from, to]);
+  const currentManifest = manifest?.period.from === from && manifest.period.to === to ? manifest : null;
+
+  function downloadJson(manifest: ProducerRecord) {
+    const blob = new Blob([JSON.stringify(manifest, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `historial-${id}-${from}-${to}.json`;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
+
+  const pages = currentManifest ? Array.from(
+    { length: Math.ceil(currentManifest.payments.length / 25) },
+    (_, page) => currentManifest.payments.slice(page * 25, (page + 1) * 25),
+  ) : [];
+
+  return (
+    <>
+      <Subtitulo>{t('Historial del productor')}</Subtitulo>
+      <Panel className="p-4 no-print rounded-lg">
+        <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto_auto] sm:items-end">
+          <TextField className="rounded-lg" type="date" etiqueta={t('Desde')} value={from} onChange={(event) => setFrom(event.target.value)} />
+          <TextField className="rounded-lg" type="date" etiqueta={t('Hasta')} value={to} onChange={(event) => setTo(event.target.value)} />
+          <Button className="rounded-lg" variant="ghost" onClick={() => window.print()} disabled={!currentManifest?.payments.length}>
+            {t('Imprimir')}
+          </Button>
+          <Button className="rounded-lg" variant="ghost" onClick={() => currentManifest && downloadJson(currentManifest)} disabled={!currentManifest}>
+            {t('Descargar JSON')}
+          </Button>
+        </div>
+        {error && <div className="mt-4"><ErrorCaja mensaje={error} /></div>}
+        {!error && loading && <div className="mt-4"><Cargando /></div>}
+        {currentManifest && (
+          <p className="mt-4 text-[13px] text-gris">
+            {t('Se excluyeron {count} pagos no liquidados.', { count: currentManifest.excluded.total })}
+          </p>
+        )}
+      </Panel>
+
+      {currentManifest && (
+        <div className="record-print-area mt-4 rounded-lg border-2 border-tinta bg-papel p-4">
+          <header className="record-print-heading mb-4 border-b-2 border-tinta pb-3 text-[13px]">
+            <h1 className="mb-2 font-display text-[22px] font-extrabold">{t('Historial del productor')}</h1>
+            <p className="font-bold">{currentManifest.producer.name}</p>
+            <p>{currentManifest.producer.community ?? '—'}</p>
+            <p className="record-address">{currentManifest.producer.stellar_address}</p>
+            <p>{t('Periodo: {from} a {to}', { from, to })}</p>
+            <p>{t('Generado: {date}', { date: dia(currentManifest.generated_at) })}</p>
+          </header>
+          {currentManifest.payments.length === 0 ? (
+            <p className="border-2 border-tinta px-4 py-6 text-[14px]">{t('No hay pagos en este periodo.')}</p>
+          ) : (
+            <>
+              {pages.map((payments, page) => (
+                <section key={page} className="record-print-page">
+                  <div className="overflow-x-auto">
+                    <table className="record-print-table min-w-[760px] text-[13px]">
+                      <thead className="bg-tinta text-left text-[11px] uppercase tracking-[.08em] text-papel"><tr>
+                        <th className="px-2 py-2">{t('Fecha')}</th><th className="px-2 py-2">{t('Entrega')}</th>
+                        <th className="px-2 py-2">{t('Producto')}</th><th className="px-2 py-2 text-right">{t('Kilos')}</th>
+                        <th className="px-2 py-2 text-right">{t('Precio')}</th><th className="px-2 py-2 text-right">{t('Castigos de calidad')}</th>
+                        <th className="px-2 py-2 text-right">{t('Neto')}</th><th className="px-2 py-2">{t('Transacción')}</th>
+                      </tr></thead>
+                    <tbody>{payments.map((payment) => (
+                      <tr key={payment.reference}>
+                        <td className="px-2 py-2 align-top">{dia(payment.date)}</td>
+                        <td className="num px-2 py-2 align-top">{payment.reference}</td>
+                        <td className="px-2 py-2 align-top">{t(payment.product)}</td>
+                        <td className="num whitespace-nowrap px-2 py-2 text-right align-top">{qty(payment.kilos)} {payment.unit}</td>
+                        <td className="num whitespace-nowrap px-2 py-2 text-right align-top">{mxn(payment.unit_price_mxn)}</td>
+                        <td className="num whitespace-nowrap px-2 py-2 text-right align-top">{mxn(payment.quality_deductions_mxn)}</td>
+                        <td className="num whitespace-nowrap px-2 py-2 text-right align-top">{mxn(payment.net_mxn)}</td>
+                        <td className="num px-2 py-2 align-top"><a className="font-bold text-verde underline" href={payment.explorer_url}>{short(payment.tx_hash, 6)}</a></td>
+                      </tr>
+                    ))}</tbody>
+                    </table>
+                  </div>
+                </section>
+              ))}
+              <div className="record-print-totals mt-4 flex flex-wrap items-center justify-between gap-3 border-y-2 border-tinta py-3 text-[14px]">
+                <strong>{t('Totales')}</strong>
+                <span>{t('Entregas')}: <b className="num font-bold">{currentManifest.totals.deliveries}</b></span>
+                <span>{t('Kilos')}: <b className="num font-bold">{qty(currentManifest.totals.kilos)} kg</b></span>
+                <span>{t('Neto recibido')}: <b className="num font-bold">{mxn(currentManifest.totals.net_mxn)}</b></span>
+              </div>
+            </>
+          )}
+          <p className="record-verification mt-3 text-[12px] text-gris">{t('Cada pago puede verificarse en /verificar con su pain.001 y su transacción de Stellar.')}</p>
+        </div>
+      )}
+    </>
+  );
+}
 
 export default function ProductorDetalle() {
   const id = Number(useParams().id);
@@ -48,6 +174,8 @@ export default function ProductorDetalle() {
           <Dato etiqueta={t('Último pago')} valor={d.stats.last_payment ? fecha(d.stats.last_payment) : '—'} />
         </div>
       </div>
+
+      <HistorialProductor id={id} />
 
       <Subtitulo>{t('Historial de entregas')}</Subtitulo>
       <Panel>
