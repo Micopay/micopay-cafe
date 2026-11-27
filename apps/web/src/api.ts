@@ -43,9 +43,11 @@ export interface Preview {
   unitPrice: string; dailyPrice: string; gross: string; deductions: Deduction[]; afterQuality: string; creditRepayment: string; net: string;
   credit: { reference: string; outstanding: string; repaymentPercent: string } | null;
 }
-export interface PaymentInput { producerId: number; productId: number; quantity: string; quality: Record<string, number>; unitPrice?: string; lot?: string; notes?: string }
+export type PaymentState = 'paid' | 'unconfirmed' | 'needs_review' | 'failed' | 'not_executed' | 'pending';
+export interface PaymentInput { producerId: number; productId: number; quantity: string; quality: Record<string, number>; unitPrice?: string; lot?: string; notes?: string; clientRef?: string }
 export interface PaymentResult extends Preview {
-  runId: number; status: 'settled' | 'unconfirmed' | 'failed_onchain' | 'not_executed' | 'needs_review'; txHash: string; resultCode?: string; explorer: string; settlementId: number; reference: string;
+  runId: number; status: 'prepared' | 'submitting' | 'unconfirmed' | 'settled' | 'failed_onchain' | 'not_executed' | 'needs_review';
+  paymentState: PaymentState; retryAllowed: boolean; txHash: string | null; resultCode?: string; explorer: string | null; settlementId: number; reference: string;
   tokenAmount: string | null; asset: string;
 }
 export interface Payment {
@@ -55,6 +57,7 @@ export interface Payment {
   run_id: number | null; msg_id: string | null; end_to_end_id: string | null; uetr: string | null; tx_hash: string | null; settled_at: string | null;
   pain001_sha256: string | null; result_code: string | null; explorer?: string | null;
   token_amount: string | null; fx_rate: string | null;
+  paymentState: PaymentState; retryAllowed: boolean;
 }
 export type CreditStatus = 'pendiente' | 'vigente' | 'vencido' | 'pagado' | 'cancelado';
 export interface Credit {
@@ -73,6 +76,13 @@ export interface Metrics {
 }
 export interface AuditRow { id: number; action: string; details: Record<string, unknown>; created_at: string }
 
+export class ApiError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
 async function call<T>(path: string, body?: unknown, method = 'POST', signal?: AbortSignal): Promise<T> {
   const options: RequestInit = { signal };
   if (body !== undefined) {
@@ -82,7 +92,7 @@ async function call<T>(path: string, body?: unknown, method = 'POST', signal?: A
   }
   const res = await fetch(`/api${path}`, options);
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error((data as { error?: string }).error ?? `Error ${res.status}`);
+  if (!res.ok) throw new ApiError((data as { error?: string }).error ?? `Error ${res.status}`, res.status);
   return data as T;
 }
 
@@ -110,9 +120,10 @@ export const api = {
 
   preview: (b: PaymentInput) => call<Preview>('/payments/preview', b),
   pay: (b: PaymentInput) => call<PaymentResult>('/payments', b),
-  retry: (id: number) => call<{ status: string; txHash: string; explorer: string }>(`/payments/${id}/retry`, {}),
+  retry: (id: number) => call<PaymentResult>(`/payments/${id}/retry`, {}),
   payments: (f: PaymentFilters & { limit?: number; offset?: number }) => call<Payment[]>(`/payments${qs({ ...f })}`),
   payment: (id: number) => call<Payment>(`/payments/${id}`),
+  paymentByRef: (clientRef: string) => call<PaymentResult>(`/payments/by-ref/${encodeURIComponent(clientRef)}`, undefined, 'GET'),
   paymentsCsvUrl: (f: PaymentFilters) => `/api/payments.csv${qs({ ...f })}`,
 
   lenders: () => call<Lender[]>('/lenders'),

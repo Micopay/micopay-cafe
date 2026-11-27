@@ -1,6 +1,6 @@
 import type { ReactNode, SelectHTMLAttributes } from 'react';
 import { t } from './i18n';
-import type { CreditStatus } from './api';
+import type { CreditStatus, PaymentState } from './api';
 import { short } from './format';
 import { Badge, Icon } from './ui';
 
@@ -87,8 +87,39 @@ const CREDIT: Record<CreditStatus, ['tinta' | 'naranja' | 'verde' | 'papel' | 'a
 };
 export const EstadoCredito = ({ s }: { s: CreditStatus }) => <Badge tono={CREDIT[s][0]}>{t(CREDIT[s][1])}</Badge>;
 
-const PAGO: Record<string, ['verde' | 'aviso', string]> = { paid: ['verde', 'Pagado'], pending: ['aviso', 'Rechazado'], in_run: ['aviso', 'Enviando'] };
-export const EstadoPago = ({ s }: { s: string }) => <Badge tono={PAGO[s]?.[0] ?? 'aviso'}>{t(PAGO[s]?.[1] ?? s)}</Badge>;
+const PAGO: Record<PaymentState, ['verde' | 'aviso' | 'papel', string]> = {
+  paid: ['verde', 'Pagado'],
+  unconfirmed: ['aviso', 'Pago sin confirmar'],
+  needs_review: ['aviso', 'Requiere revisión'],
+  failed: ['aviso', 'Fallido en Stellar'],
+  not_executed: ['aviso', 'No enviado'],
+  pending: ['papel', 'Pendiente'],
+};
+
+export function EstadoPago({ s, paymentState }: { s: string; paymentState?: PaymentState }) {
+  const state = paymentState ?? (s === 'in_run' ? 'pending' : s);
+  const status = PAGO[state as PaymentState];
+  if (!status) return <Badge tono="aviso">{s}</Badge>;
+  const label = s === 'in_run' && !paymentState ? 'Enviando' : status[1];
+  return <Badge tono={status[0]}>{t(label)}</Badge>;
+}
+
+export function MensajeEstadoPago({ paymentState, txHash }: { paymentState: PaymentState; txHash?: string | null }) {
+  const copy: Record<PaymentState, string> = {
+    paid: 'El pago se confirmó en Stellar.',
+    unconfirmed: 'No vuelvas a pagar mientras el pago siga sin confirmar.',
+    needs_review: 'El pago no pudo confirmarse y requiere una revisión manual.',
+    failed: 'Stellar rechazó la transacción en el ledger. No se movió dinero.',
+    not_executed: 'El pago no se envió. No se movió dinero.',
+    pending: 'El estado del pago sigue pendiente.',
+  };
+  return (
+    <div className="grid gap-2 text-[14px]">
+      <p>{t(copy[paymentState])}</p>
+      {paymentState === 'unconfirmed' && txHash && <div><span className="font-bold">{t('Transacción')}:</span> <Tx hash={txHash} n={10} /></div>}
+    </div>
+  );
+}
 
 /** Link to stellar.expert for a transaction hash. */
 export function Tx({ hash, n = 6 }: { hash: string | null | undefined; n?: number }) {

@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { t } from '../i18n';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../api';
-import { BarraPanel, Cargando, Doc, ErrorCaja, EstadoPago, Panel, Titulo, Tx } from '../comun';
+import { BarraPanel, Cargando, Doc, ErrorCaja, EstadoPago, MensajeEstadoPago, Panel, Titulo, Tx } from '../comun';
 import { fecha, mxn, qty, token } from '../format';
 import { Button, Icon } from '../ui';
 import { useData } from '../useData';
@@ -12,6 +12,13 @@ export default function PagoDetalle() {
   const p = useData(() => api.payment(id), [id]);
   const [retrying, setRetrying] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (p.data?.paymentState !== 'unconfirmed') return;
+    const timer = window.setInterval(p.reload, 10_000);
+    return () => window.clearInterval(timer);
+  }, [p.data?.paymentState, p.reload]);
+
   if (p.error) return <ErrorCaja mensaje={p.error} />;
   if (!p.data) return <Cargando />;
   const d = p.data;
@@ -19,9 +26,7 @@ export default function PagoDetalle() {
   async function reintentar() {
     setRetrying(true); setError(null);
     try {
-      const r = await api.retry(id);
-      if (r.status === 'failed_onchain' || r.status === 'not_executed') setError(t('Stellar volvió a rechazar la transacción.'));
-      else if (r.status !== 'settled') setError(t('El pago quedó sin confirmar. No lo repitas; revisa el historial.'));
+      await api.retry(id);
       p.reload();
     } catch (e) { setError((e as Error).message); } finally { setRetrying(false); }
   }
@@ -30,8 +35,8 @@ export default function PagoDetalle() {
     <>
       <Titulo cintillo={t('Detalle del pago')} accion={
         <div className="flex gap-3">
-          {d.status === 'paid' && <Link to={`/recibo/${d.id}`} target="_blank"><Button variant="ghost"><Icon name="receipt_long" /> {t('Recibo del productor')}</Button></Link>}
-          {d.status === 'pending' && <Button disabled={retrying} onClick={reintentar}>{retrying ? t('Reintentando…') : t('Reintentar pago')}</Button>}
+          {d.paymentState === 'paid' && <Link to={`/recibo/${d.id}`} target="_blank"><Button variant="ghost"><Icon name="receipt_long" /> {t('Recibo del productor')}</Button></Link>}
+          {d.retryAllowed && <Button disabled={retrying} onClick={reintentar}>{retrying ? t('Reintentando…') : t('Reintentar pago')}</Button>}
         </div>
       }><span className="num">{d.reference}</span></Titulo>
       {error && <div className="mb-5"><ErrorCaja mensaje={error} /></div>}
@@ -56,7 +61,10 @@ export default function PagoDetalle() {
         <Panel>
           <BarraPanel>{t('Liquidación en Stellar e ISO 20022')}</BarraPanel>
           <dl className="p-5 grid gap-2.5 text-[14px]">
-            <Fila e={t('Estado')} v={<EstadoPago s={d.status} />} />
+            <div className="grid gap-2">
+              <Fila e={t('Estado')} v={<EstadoPago s={d.paymentState} paymentState={d.paymentState} />} />
+              <div className="min-w-0 text-right"><MensajeEstadoPago paymentState={d.paymentState} txHash={d.tx_hash} /></div>
+            </div>
             {d.result_code && <Fila e={t('Código de rechazo')} v={d.result_code} tono="text-rojo" />}
             {d.token_amount && <Fila e={t('Liquidado en Stellar')} v={`${token(d.token_amount)} USDC`} tono="font-bold text-verde" />}
             {d.fx_rate && <Fila e={t('Tipo de cambio')} v={`1 USD = ${Number(d.fx_rate).toFixed(4)} MXN`} />}
@@ -75,7 +83,7 @@ export default function PagoDetalle() {
           <div className="px-5 pb-5 flex flex-wrap gap-2">
             {d.run_id && <Doc href={`/api/runs/${d.run_id}/pain001`} nombre="pain.001" desc={t('Orden de pago')} />}
             {d.run_id && <Doc href={`/api/runs/${d.run_id}/pain002`} nombre="pain.002" desc={t('Estado')} />}
-            {d.status === 'paid' && <Doc href={`/api/payments/${d.id}/camt054`} nombre="camt.054" desc={t('Aviso al productor')} />}
+            {d.paymentState === 'paid' && <Doc href={`/api/payments/${d.id}/camt054`} nombre="camt.054" desc={t('Aviso al productor')} />}
             {d.tx_hash && <Link to={`/verificar?tx=${d.tx_hash}`}><Button variant="ghost"><Icon name="verified" /> {t('Verificar este pago')}</Button></Link>}
           </div>
         </Panel>
