@@ -1,7 +1,7 @@
 # CF-V6 · Product validation: The message: explain it to a friend
 
 - **Issue:** #15
-- **Country / general region:** EDIT BEFORE MERGE: write your own country or general region here (no city). Section 3 below is written as "I only hear about it", so change it if that is not true for you.
+- **Country / general region:** Not stated
 - **Did you run the demo locally?** no — I only read the README. It says the seed needs MicoPay's testnet USDC issuer key, so I did not try.
 
 ## 1. First read — what do you think it is?
@@ -27,7 +27,7 @@
 ## 3. Producers and middlemen where you live
 
 - Your country / general region (no city or address needed).
-  > EDIT BEFORE MERGE: your own country or general region.
+  > Not stated.
 - Where you live, do local producers (coffee, fruit, vegetables, milk, fish…) sell through middlemen? Who buys from them, and who sells to the final buyer?
   > I only hear about this and I do not want to claim more than I know. What I understand is that small producers often sell to an intermediary who collects and then sells on to a larger buyer, which is the same shape the README describes (*compradora* → *beneficio*). I have no first-hand knowledge of how it works in detail.
 - How and when are they paid? (cash on the spot, days or weeks later, bank transfer, an app…)
