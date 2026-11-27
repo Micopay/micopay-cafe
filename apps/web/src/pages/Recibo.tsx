@@ -23,7 +23,7 @@ export default function Recibo() {
           {pagado ? t('Estado: Pagado') : t('Estado: Pendiente')}
         </span>
         <Button onClick={() => window.print()} variant="ghost">
-          <Icon name="print" /> {t('Imprimir')}
+          {t('Imprimir')}
         </Button>
       </div>
 

@@ -181,7 +181,6 @@ const EN: Record<string, string> = {
   'Último pago': 'Last payment',
   'Historial de entregas': 'Delivery history',
   'Historial del productor': "Producer's payment record",
-  'Imprimir': 'Print',
   'Descargar JSON': 'Download JSON',
   'Se excluyeron {count} pagos no liquidados.': '{count} unsettled payments were excluded.',
   'Periodo: {from} a {to}': 'Period: {from} to {to}',
