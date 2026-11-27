@@ -63,6 +63,9 @@ export default function RealizarPago() {
   const [lot, setLot] = useState('');
   const [notes, setNotes] = useState('');
   const [preview, setPreview] = useState<Preview | null>(null);
+  const [previewStale, setPreviewStale] = useState(false);
+  const [unconfirmedProducers, setUnconfirmedProducers] = useState<number[]>([]);
+  const previewSeqRef = useRef(0);
   const [error, setError] = useState<string | null>(null);
   const [confirmando, setConfirmando] = useState(false);
   const [paying, setPaying] = useState(false);
@@ -88,17 +91,35 @@ export default function RealizarPago() {
   const valid = producerId !== null && productId !== null && DEC.test(quantity) && Number(quantity) > 0 && DEC.test(price) && Number(price) > 0;
   const input = valid ? { producerId: producerId!, productId: productId!, quantity, quality: qualityNumbers, unitPrice: price, lot: lot || undefined, notes: notes || undefined } : null;
 
+  const isBlocked = producerId !== null && unconfirmedProducers.includes(producerId);
+
   useEffect(() => {
     setConfirmando(false);
-    if (delivery || recoveryBlocked) { setPreview(null); return; }
-    if (!input) { setPreview(null); return; }
-    let active = true;
-    const timer = setTimeout(() => {
-      api.preview(input).then((p) => {
-        if (active) { setPreview(p); setError(null); }
-      }).catch((e: Error) => { if (active) setError(e.message); });
+    if (delivery || recoveryBlocked) { setPreview(null); setPreviewStale(false); return; }
+    setPreviewStale(true);
+    if (!input) {
+      setPreview(null);
+      setPreviewStale(false);
+      return;
+    }
+    const currentSeq = ++previewSeqRef.current;
+    const t = setTimeout(() => {
+      api.preview(input)
+        .then((p) => {
+          if (currentSeq === previewSeqRef.current) {
+            setPreview(p);
+            setError(null);
+            setPreviewStale(false);
+          }
+        })
+        .catch((e: Error) => {
+          if (currentSeq === previewSeqRef.current) {
+            setError(e.message);
+            setPreviewStale(false);
+          }
+        });
     }, 250);
-    return () => { active = false; clearTimeout(timer); };
+    return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [producerId, productId, quantity, price, qualityNumbers, delivery, recoveryBlocked]);
 
@@ -183,6 +204,10 @@ export default function RealizarPago() {
     setResult(null); setActivePayment(null); setQuantity(''); setQuality({}); setConCalidad(false); setLot(''); setNotes(''); setError(null);
   }
 
+  function bloquearProductor(id: number) {
+    setUnconfirmedProducers((prev) => (prev.includes(id) ? prev : [...prev, id]));
+  }
+
   function completarPago(payment: PaymentResult) {
     clearStoredDelivery();
     setDelivery(null);
@@ -214,7 +239,10 @@ export default function RealizarPago() {
     try {
       const payment = await api.pay({ ...attempt.input, clientRef: attempt.clientRef });
       if (payment.paymentState === 'paid') completarPago(payment);
-      else setActivePayment(payment);
+      else {
+        setActivePayment(payment);
+        if (payment.paymentState === 'unconfirmed' || payment.paymentState === 'needs_review') bloquearProductor(attempt.input.producerId);
+      }
     } catch (e: unknown) {
       setError((e as Error).message);
       setResendAllowed(!(e instanceof ApiError) || e.status >= 500);
@@ -235,6 +263,12 @@ export default function RealizarPago() {
     } finally {
       setPaying(false);
     }
+  }
+
+  function descartarEntregaGuardada() {
+    clearStoredDelivery();
+    setRecoveryBlocked(false);
+    setError(null);
   }
 
   function entregarAHistorial() {
@@ -311,7 +345,7 @@ export default function RealizarPago() {
                 )}
               </Panel>
 
-              <div className="grid gap-6 xl:grid-cols-[1fr_380px] items-start">
+              <div className="grid gap-6 md:grid-cols-[1fr_360px] xl:grid-cols-[1fr_380px] items-start">
                 <section className="grid gap-5">
                   <div>
                     <Label>{t('Producto')}</Label>
@@ -342,7 +376,7 @@ export default function RealizarPago() {
                   </div>
                 </section>
 
-                <aside className="xl:sticky xl:top-8">
+                <aside className="md:sticky md:top-8 xl:sticky xl:top-8">
                   <Panel sombra>
                     <BarraPanel>{t('Total a pagar')}</BarraPanel>
                     <div className="p-5">
@@ -360,14 +394,24 @@ export default function RealizarPago() {
                         </dl>
                       )}
                       {error && <div className="mt-4"><ErrorCaja mensaje={error} /></div>}
+                      {recoveryBlocked && (
+                        <Link to="/historial" onClick={descartarEntregaGuardada} className="mt-3 inline-block">
+                          <Button variant="ghost">{t('Descartar esta entrega y ver el historial')}</Button>
+                        </Link>
+                      )}
+                      {isBlocked && (
+                        <div className="mt-3 border-2 border-linea bg-papel px-3 py-2 text-[13px] font-semibold text-gris">
+                          {t('Este productor tiene un pago sin confirmar. Revisa el historial de pagos y no pagues de nuevo.')}
+                        </div>
+                      )}
                       {!confirmando ? (
-                        <Button block className="mt-5" disabled={!preview || p.account !== 'ok' || recoveryBlocked} onClick={() => setConfirmando(true)}>
+                        <Button block className="mt-5" disabled={!preview || previewStale || p.account !== 'ok' || recoveryBlocked || isBlocked} onClick={() => setConfirmando(true)}>
                           <Icon name="payments" /> {t('Ejecutar pago')}
                         </Button>
                       ) : (
                         <div className="mt-5 grid gap-3">
                           <div className="text-[14px]">{t('¿Confirmas el pago de {amount} a {name}?', { amount: mxn(preview?.net), name: p.name })}{Number(preview?.creditRepayment) > 0 && t(' Incluye el abono de {amount} al prestamista.', { amount: mxn(preview?.creditRepayment) })} {t('Se ejecuta en Stellar testnet.')}</div>
-                          <Button block disabled={paying || !recoveryChecked} onClick={() => enviarEntrega()}><Icon name="lock" /> {paying ? t('Firmando y enviando…') : t('Confirmar pago')}</Button>
+                          <Button block disabled={paying || !recoveryChecked || isBlocked || previewStale} onClick={() => enviarEntrega()}><Icon name="lock" /> {paying ? t('Firmando y enviando…') : t('Confirmar pago')}</Button>
                           <Button block variant="ghost" disabled={paying} onClick={() => setConfirmando(false)}>{t('Cancelar')}</Button>
                         </div>
                       )}
@@ -459,6 +503,11 @@ function EntregaRecuperada({
               ? t('No hay pago registrado con esta referencia. Puedes enviar esta entrega con la misma referencia y los mismos datos.')
               : t('No se pudo confirmar la respuesta del pago. Conservamos la misma referencia y los mismos datos.')}</p>
             {resendAllowed && <Button disabled={paying} onClick={onSend}>{paying ? t('Firmando y enviando…') : t('Enviar la misma entrega')}</Button>}
+            {!resendAllowed && !paying && !loading && (
+              <Link to="/historial" onClick={onHandoff}>
+                <Button variant="ghost">{t('Descartar esta entrega y ver el historial')}</Button>
+              </Link>
+            )}
           </>
         )}
         {error && <ErrorCaja mensaje={error} />}

@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pain.001.001.09">
+  <CstmrCdtTrfInitn>
+    <GrpHdr>
+      <MsgId>PAIN-20261114-JCSBCC8948</MsgId>
+      <CreDtTm>2026-11-14T15:30:00Z</CreDtTm>
+      <NbOfTxs>1</NbOfTxs>
+      <CtrlSum>15400.00</CtrlSum>
+      <InitgPty>
+        <Nm>Cooperativa Cafetalera Tzeltal</Nm>
+      </InitgPty>
+    </GrpHdr>
+    <PmtInf>
+      <PmtInfId>RUN-20261114-3K960TA1JR</PmtInfId>
+      <PmtMtd>TRF</PmtMtd>
+      <BtchBookg>false</BtchBookg>
+      <NbOfTxs>1</NbOfTxs>
+      <CtrlSum>15400.00</CtrlSum>
+      <PmtTpInf>
+        <CtgyPurp>
+          <Cd>SUPP</Cd>
+        </CtgyPurp>
+      </PmtTpInf>
+      <ReqdExctnDt>
+        <Dt>2026-11-14</Dt>
+      </ReqdExctnDt>
+      <Dbtr>
+        <Nm>Cooperativa Cafetalera Tzeltal</Nm>
+      </Dbtr>
+      <DbtrAcct>
+        <Id>
+          <Othr>
+            <Id>COOP-0001</Id>
+          </Othr>
+        </Id>
+        <Prxy>
+          <Tp>
+            <Prtry>STELLAR</Prtry>
+          </Tp>
+          <Id>GCKFBEIYV2U22IO2BJ4KVJOIP7XPWQGQFKKWXR6DOSJBV7STMAQSMTGG</Id>
+        </Prxy>
+      </DbtrAcct>
+      <DbtrAgt>
+        <FinInstnId>
+          <Nm>Stellar Network</Nm>
+          <Othr>
+            <Id>STELLAR</Id>
+          </Othr>
+        </FinInstnId>
+      </DbtrAgt>
+      <ChrgBr>DEBT</ChrgBr>
+      <CdtTrfTxInf>
+        <PmtId>
+          <InstrId>INS-20261114-32T49FJ3FM</InstrId>
+          <EndToEndId>E2E-20261114-D6SAJDWW0N</EndToEndId>
+          <UETR>3f2b8c1e-7a4d-4e9b-9c21-5d8e0f6a1b2c</UETR>
+        </PmtId>
+        <Amt>
+          <InstdAmt Ccy="MXN">15400.00</InstdAmt>
+        </Amt>
+        <XchgRateInf>
+          <UnitCcy>USD</UnitCcy>
+          <XchgRate>18.406744</XchgRate>
+          <RateTp>SPOT</RateTp>
+        </XchgRateInf>
+        <CdtrAgt>
+          <FinInstnId>
+            <Nm>Stellar Network</Nm>
+            <Othr>
+              <Id>STELLAR</Id>
+            </Othr>
+          </FinInstnId>
+        </CdtrAgt>
+        <Cdtr>
+          <Nm>Juan Pérez López</Nm>
+        </Cdtr>
+        <CdtrAcct>
+          <Id>
+            <Othr>
+              <Id>PROD-0042</Id>
+            </Othr>
+          </Id>
+          <Prxy>
+            <Tp>
+              <Prtry>STELLAR</Prtry>
+            </Tp>
+            <Id>GBXGQJWVLWOYHFLVTKWV5FGHA3LNYY2JQKM7OAJAUEQFU6LPCSEFVXON</Id>
+          </Prxy>
+        </CdtrAcct>
+        <Purp>
+          <Cd>GDDS</Cd>
+        </Purp>
+        <RmtInf>
+          <Strd>
+            <RfrdDocInf>
+              <Tp>
+                <CdOrPrtry>
+                  <Prtry>LIQUIDACION</Prtry>
+                </CdOrPrtry>
+              </Tp>
+              <Nb>ENT-2026-000123</Nb>
+              <RltdDt>2026-11-14</RltdDt>
+              <LineDtls>
+                <Id>
+                  <Nb>LOTE-45</Nb>
+                </Id>
+                <Desc>Café pergamino · 250.00 kg × 85.00 MXN/kg</Desc>
+                <Amt>
+                  <RmtdAmt Ccy="MXN">21250.00</RmtdAmt>
+                </Amt>
+              </LineDtls>
+            </RfrdDocInf>
+            <RfrdDocAmt>
+              <DuePyblAmt Ccy="MXN">21250.00</DuePyblAmt>
+              <AdjstmntAmtAndRsn>
+                <Amt Ccy="MXN">850.00</Amt>
+                <CdtDbtInd>DBIT</CdtDbtInd>
+                <Rsn>HUME</Rsn>
+                <AddtlInf>Castigo por humedad 13.5%</AddtlInf>
+              </AdjstmntAmtAndRsn>
+              <AdjstmntAmtAndRsn>
+                <Amt Ccy="MXN">5000.00</Amt>
+                <CdtDbtInd>DBIT</CdtDbtInd>
+                <Rsn>CRED</Rsn>
+                <AddtlInf>Abono crédito CR-2026-0012</AddtlInf>
+              </AdjstmntAmtAndRsn>
+              <RmtdAmt Ccy="MXN">15400.00</RmtdAmt>
+            </RfrdDocAmt>
+          </Strd>
+        </RmtInf>
+        <SplmtryData>
+          <PlcAndNm>StellarSettlement</PlcAndNm>
+          <Envlp>
+            <StellarSettlement xmlns="urn:micopay:cafe:stellar-settlement:1">
+              <Network>TESTNET</Network>
+              <Asset code="USDC" issuer="GCKFBEIYV2U22IO2BJ4KVJOIP7XPWQGQFKKWXR6DOSJBV7STMAQSMTGG"/>
+              <Amount>836.64627</Amount>
+              <FxRate unit="MXN/USDC">18.406744</FxRate>
+              <TxHash>aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa</TxHash>
+            </StellarSettlement>
+          </Envlp>
+        </SplmtryData>
+      </CdtTrfTxInf>
+    </PmtInf>
+  </CstmrCdtTrfInitn>
+</Document>

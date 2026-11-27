@@ -223,3 +223,138 @@ body {
     animation: fadeIn 0.3s ease-out;
   }
 }
+
+.record-print-table th,
+.record-print-table td {
+  border-bottom: 1px solid var(--color-linea);
+}
+
+@media print {
+  @page producer-record {
+    size: letter portrait;
+    margin: 0.4in;
+  }
+
+  body.print-producer-record {
+    page: producer-record;
+  }
+
+  body.print-producer-record #root > div {
+    display: block !important;
+    min-height: 0 !important;
+  }
+
+  body.print-producer-record #root > div > aside {
+    display: none !important;
+  }
+
+  body.print-producer-record #root > div > main {
+    display: block !important;
+    width: auto !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  body.print-producer-record #root > div > main > :not(.record-print-area) {
+    display: none !important;
+  }
+
+  body.print-producer-record .record-print-area {
+    position: static;
+    display: block !important;
+    width: 100%;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    color: #000;
+    background: #fff;
+    font: 9pt Arial, sans-serif;
+  }
+
+  body.print-producer-record .record-print-area .no-print {
+    display: none !important;
+  }
+
+  body.print-producer-record .record-print-heading {
+    margin-bottom: 8pt;
+    line-height: 1.25;
+  }
+
+  body.print-producer-record .record-print-heading h1 {
+    margin: 0 0 5pt;
+    font-size: 15pt;
+    font-weight: 700;
+  }
+
+  body.print-producer-record .record-print-heading p {
+    margin: 1pt 0;
+  }
+
+  body.print-producer-record .record-address {
+    overflow-wrap: anywhere;
+    font-size: 8pt;
+  }
+
+  body.print-producer-record .record-print-page {
+    break-after: page;
+    page-break-after: always;
+  }
+
+  body.print-producer-record .record-print-page:last-of-type {
+    break-after: auto;
+    page-break-after: auto;
+  }
+
+  body.print-producer-record .record-print-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 7.5pt;
+  }
+
+  body.print-producer-record .record-print-table th,
+  body.print-producer-record .record-print-table td {
+    border: 1px solid #000;
+    padding: 3pt 4pt;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  body.print-producer-record .record-print-table th {
+    font-weight: 700;
+  }
+
+  body.print-producer-record .record-print-table td.num,
+  body.print-producer-record .record-print-table th:nth-child(4),
+  body.print-producer-record .record-print-table th:nth-child(5),
+  body.print-producer-record .record-print-table th:nth-child(6),
+  body.print-producer-record .record-print-table th:nth-child(7) {
+    text-align: right;
+  }
+
+  body.print-producer-record .record-print-table tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  body.print-producer-record .record-print-table a {
+    color: #000;
+    text-decoration: none;
+  }
+
+  body.print-producer-record .record-print-totals {
+    display: flex;
+    justify-content: space-between;
+    gap: 8pt;
+    margin-top: 8pt;
+    padding: 5pt 0;
+    border-top: 2px solid #000;
+    border-bottom: 1px solid #000;
+  }
+
+  body.print-producer-record .record-verification {
+    margin-top: 8pt;
+    font-size: 8pt;
+  }
+}

@@ -10,6 +10,7 @@ import Productores from './pages/Productores';
 import ProductorDetalle from './pages/ProductorDetalle';
 import Historial from './pages/Historial';
 import PagoDetalle from './pages/PagoDetalle';
+import Verificar from './pages/Verificar';
 import Resumen from './pages/admin/Resumen';
 import Precios from './pages/admin/Precios';
 import Creditos from './pages/admin/Creditos';
@@ -42,6 +43,7 @@ const OPERACION = [
   { to: '/', icon: 'payments', label: 'Realizar pago' },
   { to: '/productores', icon: 'person', label: 'Productores' },
   { to: '/historial', icon: 'receipt_long', label: 'Historial' },
+  { to: '/verificar', icon: 'verified', label: 'Verificar' },
 ];
 const ADMIN = [
   { to: '/admin', icon: 'home', label: 'Resumen del mes' },
@@ -130,6 +132,7 @@ export default function App() {
         <Route path="/productores/:id" element={<ProductorDetalle />} />
         <Route path="/historial" element={<Historial />} />
         <Route path="/historial/:id" element={<PagoDetalle />} />
+        <Route path="/verificar" element={<Verificar />} />
         <Route path="/admin" element={<Resumen />} />
         <Route path="/admin/precios" element={<Precios />} />
         <Route path="/admin/creditos" element={<Creditos />} />

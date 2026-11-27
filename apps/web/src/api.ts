@@ -7,6 +7,7 @@ export interface Summary {
   network: string;
   signer: 'local' | 'micopay';
 }
+export interface Health { ok: boolean; signer: 'local' | 'micopay'; network: string }
 export interface QualityField { key: string; label: string; unit: string }
 export interface Product {
   id: number; name: string; unit: string; price: string | null; price_since: string | null; quality_schema: QualityField[];
@@ -23,6 +24,19 @@ export interface ProducerDetail extends ProducerRow {
   stats: { deliveries: number; quantity: string; paid: string; repaid: string; last_payment: string | null };
   history: Array<{ id: number; reference: string; created_at: string; product: string; unit: string; quantity: string; unit_price: string; gross: string; credit_repayment: string; net: string; status: string; tx_hash: string | null }>;
   credits: Array<{ id: number; reference: string; purpose: string; total_due: string; outstanding: string; due_date: string; status: CreditStatus }>;
+}
+export interface ProducerRecord {
+  producer: { name: string; community: string | null; stellar_address: string };
+  period: { from: string; to: string };
+  generated_at: string;
+  payments: Array<{
+    reference: string; date: string; product: string; kilos: string; unit: string; unit_price_mxn: string;
+    quality_deductions: Deduction[]; quality_deductions_mxn: string; net_mxn: string;
+    token_amount: string; asset: { code: string; issuer: string }; tx_hash: string; explorer_url: string;
+    pain001_sha256: string; pain001_url: string; camt054_url: string;
+  }>;
+  totals: { deliveries: number; kilos: string; net_mxn: string };
+  excluded: { unconfirmed: number; failed: number; other: number; total: number };
 }
 export interface Deduction { reason: string; label: string; amount: string }
 export interface Preview {
@@ -69,10 +83,14 @@ export class ApiError extends Error {
   }
 }
 
-async function call<T>(path: string, body?: unknown, method = 'POST'): Promise<T> {
-  const res = await fetch(`/api${path}`, body === undefined ? undefined : {
-    method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
-  });
+async function call<T>(path: string, body?: unknown, method = 'POST', signal?: AbortSignal): Promise<T> {
+  const options: RequestInit = { signal };
+  if (body !== undefined) {
+    options.method = method;
+    options.headers = { 'content-type': 'application/json' };
+    options.body = JSON.stringify(body);
+  }
+  const res = await fetch(`/api${path}`, options);
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new ApiError((data as { error?: string }).error ?? `Error ${res.status}`, res.status);
   return data as T;
@@ -87,12 +105,15 @@ export interface PaymentFilters { from?: string; to?: string; status?: string; p
 
 export const api = {
   summary: () => call<Summary>('/summary'),
+  health: () => call<Health>('/health', undefined, 'GET', AbortSignal.timeout(5_000)),
   products: () => call<Product[]>('/products'),
   prices: (productId?: number) => call<PriceRow[]>(`/prices${qs({ productId })}`),
   setPrice: (productId: number, price: string) => call('/prices', { productId, price }),
 
   producers: (q?: string) => call<ProducerRow[]>(`/producers${qs({ q })}`),
   producer: (id: number) => call<ProducerDetail>(`/producers/${id}`),
+  producerRecord: (id: number, from?: string, to?: string) =>
+    call<ProducerRecord>(`/producers/${id}/record${qs({ from, to })}`),
   createProducer: (b: { name: string; community?: string; contact?: string; stellarAddress: string }) => call<{ id: number; accountId: string; account: AccountState }>('/producers', b),
   setProducerActive: (id: number, isActive: boolean) => call(`/producers/${id}`, { isActive }, 'PATCH'),
   testnetAccount: () => call<{ address: string }>('/testnet/account', {}),
